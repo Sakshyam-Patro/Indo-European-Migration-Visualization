@@ -63,7 +63,7 @@ const SHORT_LABELS: Record<string, string> = {
   'clv-west': 'Pre-PIE',
   'clv-south': 'Anatolian',
   'yamnaya-europe': 'Balto-Slavic\nGermanic',
-  'yamnaya-afanasievo': 'Tocharian',
+  'yamnaya-afanasievo': 'Afanasievo',
   'bell-beaker': 'Celtic\nItalic',
   'indo-iranian': 'Indo-Iranian',
   'greek-migration': 'Greek',
@@ -72,14 +72,14 @@ const SHORT_LABELS: Record<string, string> = {
 
 /** Per-route label offset adjustments [latOffset, lngOffset] to avoid overlap */
 const LABEL_OFFSETS: Record<string, [number, number]> = {
-  'clv-west': [2, 2.5],
-  'clv-south': [-2.5, -3],
-  'yamnaya-europe': [2.5, -3],
-  'yamnaya-afanasievo': [2, 2],
-  'bell-beaker': [2, -3.5],
-  'indo-iranian': [-2.5, 3.5],
-  'greek-migration': [-3.5, -3],
-  'tocharian-route': [-1.5, 2],
+  'clv-west': [1, 1.5],
+  'clv-south': [-1.5, -2],
+  'yamnaya-europe': [1.5, -2],
+  'yamnaya-afanasievo': [1.5, 1.5],
+  'bell-beaker': [1.5, -2],
+  'indo-iranian': [-1.5, 2],
+  'greek-migration': [-2, -2],
+  'tocharian-route': [-1, 1.5],
 }
 
 interface CulturePopupData {
@@ -714,9 +714,9 @@ export default function MigrationMap() {
             animate={{ opacity: 1, scale: 1 }}
             style={{
               position: 'absolute',
-              top: Math.min(selectedCulture.y, 380),
-              left: Math.min(Math.max(selectedCulture.x, 180), 800),
-              transform: 'translate(-50%, -100%) translateY(-20px)',
+              top: selectedCulture.y > 300 ? Math.max(10, selectedCulture.y - 280) : selectedCulture.y + 10,
+              left: Math.min(Math.max(selectedCulture.x, 170), mapContainerRef.current ? mapContainerRef.current.offsetWidth - 170 : 800),
+              transform: 'translateX(-50%)',
               zIndex: 1001,
               width: 280,
               padding: '1rem',
@@ -811,9 +811,9 @@ export default function MigrationMap() {
             animate={{ opacity: 1, scale: 1 }}
             style={{
               position: 'absolute',
-              top: Math.min(selectedBranch.y, 380),
-              left: Math.min(Math.max(selectedBranch.x, 180), 800),
-              transform: 'translate(-50%, -100%) translateY(-20px)',
+              top: selectedBranch.y > 300 ? Math.max(10, selectedBranch.y - 280) : selectedBranch.y + 10,
+              left: Math.min(Math.max(selectedBranch.x, 170), mapContainerRef.current ? mapContainerRef.current.offsetWidth - 170 : 800),
+              transform: 'translateX(-50%)',
               zIndex: 1001,
               width: 300,
               padding: '1rem',
