@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import { timelineEvents, type TimelineEvent } from '../../data/timeline'
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -32,6 +32,15 @@ export default function Timeline() {
   const [pieBracket, setPieBracket] = useState<[number, number]>([-4500, -2500])
   const [isDragging, setIsDragging] = useState<'left' | 'right' | null>(null)
   const trackRef = useRef<HTMLDivElement>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (selectedEvent && detailRef.current) {
+      setTimeout(() => {
+        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 100)
+    }
+  }, [selectedEvent])
 
   const handleTrackMouseMove = (e: React.MouseEvent | MouseEvent) => {
     if (!isDragging || !trackRef.current) return
@@ -69,6 +78,18 @@ export default function Timeline() {
   return (
     <div style={{ width: '100%' }}>
       <style>{`
+        @keyframes markerPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(200, 169, 110, 0.4); }
+          50% { box-shadow: 0 0 0 6px rgba(200, 169, 110, 0); }
+        }
+        .timeline-marker:not(.timeline-marker-selected) {
+          animation: markerPulse 2.5s ease-in-out infinite;
+        }
+        .timeline-marker:hover .timeline-tooltip {
+          opacity: 1;
+          transform: translateX(-50%) translateY(0);
+          pointer-events: auto;
+        }
         @media (max-width: 600px) {
           .timeline-scroll-wrapper {
             overflow-x: auto;
@@ -119,7 +140,7 @@ export default function Timeline() {
           fontSize: '1rem',
         }}>
           Drag the golden bracket to explore when Proto-Indo-European could have been spoken.
-          Click any marker to learn more.
+          {' '}<strong style={{ color: 'var(--text-bright)' }}>Click any colored marker</strong> to learn more.
         </p>
       </div>
 
@@ -190,10 +211,11 @@ export default function Timeline() {
               margin: '0 auto',
             }} />
             <span style={{
-              fontSize: '0.6rem',
-              color: 'var(--text-on-dark-muted)',
+              fontSize: '0.65rem',
+              color: 'rgba(255, 255, 255, 0.7)',
               fontFamily: 'var(--font-body)',
               whiteSpace: 'nowrap',
+              fontWeight: 500,
             }}>
               {dateToLabel(d)}
             </span>
@@ -267,102 +289,136 @@ export default function Timeline() {
           return (
             <motion.button
               key={event.id}
+              className={`timeline-marker${isSelected ? ' timeline-marker-selected' : ''}`}
               onClick={() => setSelectedEvent(isSelected ? null : event)}
-              whileHover={{ scale: 1.3 }}
+              whileHover={{ scale: 1.4 }}
               style={{
                 position: 'absolute',
                 left: `calc(${pct}% * 0.92 + 4%)`,
                 top: isAbove ? 90 : 130,
                 transform: 'translate(-50%, -50%)',
-                width: isSelected ? 14 : 10,
-                height: isSelected ? 14 : 10,
+                width: isSelected ? 18 : 14,
+                height: isSelected ? 18 : 14,
                 borderRadius: '50%',
                 background: CATEGORY_COLORS[event.category],
                 border: isSelected ? '2px solid var(--text-bright)' : '2px solid var(--bg-deep)',
                 cursor: 'pointer',
                 zIndex: isSelected ? 10 : 2,
                 boxShadow: isSelected
-                  ? `0 0 10px ${CATEGORY_COLORS[event.category]}66`
+                  ? `0 0 12px ${CATEGORY_COLORS[event.category]}88`
                   : 'none',
-                transition: 'all 0.2s',
+                transition: 'width 0.2s, height 0.2s, border 0.2s, box-shadow 0.2s',
                 padding: 0,
               }}
-              title={`${event.label} (${dateToLabel(event.date)})`}
               aria-label={`${event.label}, ${dateToLabel(event.date)}`}
-            />
+            >
+              {/* Hover tooltip */}
+              <span
+                className="timeline-tooltip"
+                style={{
+                  position: 'absolute',
+                  bottom: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%) translateY(4px)',
+                  marginBottom: 8,
+                  padding: '0.35rem 0.6rem',
+                  background: 'rgba(10, 12, 18, 0.95)',
+                  border: `1px solid ${CATEGORY_COLORS[event.category]}50`,
+                  borderRadius: 8,
+                  fontSize: '0.7rem',
+                  fontFamily: 'var(--font-body)',
+                  color: 'var(--text-bright)',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  opacity: 0,
+                  transition: 'opacity 0.2s, transform 0.2s',
+                  zIndex: 20,
+                }}
+              >
+                {event.label}
+              </span>
+            </motion.button>
           )
         })}
       </div>
       </div>
 
       {/* Selected event detail */}
-      {selectedEvent && (
-        <motion.div
-          key={selectedEvent.id}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          style={{
-            marginTop: '1rem',
-            padding: '1.25rem',
-            background: 'rgba(20, 24, 32, 0.6)',
-            borderRadius: 12,
-            border: `1px solid ${CATEGORY_COLORS[selectedEvent.category]}33`,
-          }}
-        >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.75rem',
-            marginBottom: '0.75rem',
-            flexWrap: 'wrap',
-          }}>
-            <span style={{
-              width: 10, height: 10,
-              borderRadius: '50%',
-              background: CATEGORY_COLORS[selectedEvent.category],
-              display: 'inline-block',
-              flexShrink: 0,
-            }} />
-            <span style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '1.3rem',
-              color: 'var(--text-bright)',
-            }}>
-              {selectedEvent.label}
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.8rem',
-              color: 'var(--text-on-dark-muted)',
-              padding: '0.15rem 0.5rem',
-              background: 'rgba(0,0,0,0.3)',
+      <AnimatePresence>
+        {selectedEvent && (
+          <motion.div
+            ref={detailRef}
+            key={selectedEvent.id}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.35, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{
+              marginTop: '1rem',
+              padding: 'clamp(1.25rem, 3vw, 2rem)',
+              background: 'rgba(20, 24, 32, 0.6)',
               borderRadius: 12,
+              border: `1px solid ${CATEGORY_COLORS[selectedEvent.category]}33`,
+              textAlign: 'center',
             }}>
-              {dateToLabel(selectedEvent.date)}
-            </span>
-            <span style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.65rem',
-              color: CATEGORY_COLORS[selectedEvent.category],
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}>
-              {CATEGORY_LABELS[selectedEvent.category]}
-            </span>
-          </div>
-          <p style={{
-            fontFamily: 'var(--font-body)',
-            fontSize: '0.9rem',
-            color: 'var(--text-on-dark-secondary)',
-            lineHeight: 1.6,
-            maxWidth: '65ch',
-            marginBottom: 0,
-          }}>
-            {selectedEvent.description}
-          </p>
-        </motion.div>
-      )}
+              <div style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                marginBottom: '0.75rem',
+                flexWrap: 'wrap',
+                justifyContent: 'center',
+              }}>
+                <span style={{
+                  width: 10, height: 10,
+                  borderRadius: '50%',
+                  background: CATEGORY_COLORS[selectedEvent.category],
+                  display: 'inline-block',
+                  flexShrink: 0,
+                }} />
+                <span style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: '1.3rem',
+                  color: 'var(--text-bright)',
+                }}>
+                  {selectedEvent.label}
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.8rem',
+                  color: 'var(--text-on-dark-muted)',
+                  padding: '0.15rem 0.5rem',
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: 12,
+                }}>
+                  {dateToLabel(selectedEvent.date)}
+                </span>
+                <span style={{
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.65rem',
+                  color: CATEGORY_COLORS[selectedEvent.category],
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.08em',
+                }}>
+                  {CATEGORY_LABELS[selectedEvent.category]}
+                </span>
+              </div>
+              <p style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.9rem',
+                color: 'var(--text-on-dark-secondary)',
+                lineHeight: 1.7,
+                maxWidth: '65ch',
+                margin: '0 auto',
+              }}>
+                {selectedEvent.description}
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
