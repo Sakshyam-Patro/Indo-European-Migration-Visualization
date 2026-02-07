@@ -72,18 +72,24 @@ const SHORT_LABELS: Record<string, string> = {
 
 /** Per-route label offset adjustments [latOffset, lngOffset] to avoid overlap */
 const LABEL_OFFSETS: Record<string, [number, number]> = {
-  'clv-west': [4, 5],
-  'clv-south': [-5, -6],
-  'yamnaya-europe': [5, -6],
-  'yamnaya-afanasievo': [4, 4],
-  'bell-beaker': [4, -7],
-  'indo-iranian': [-5, 7],
-  'greek-migration': [-7, -6],
-  'tocharian-route': [-3, 4],
+  'clv-west': [2, 2.5],
+  'clv-south': [-2.5, -3],
+  'yamnaya-europe': [2.5, -3],
+  'yamnaya-afanasievo': [2, 2],
+  'bell-beaker': [2, -3.5],
+  'indo-iranian': [-2.5, 3.5],
+  'greek-migration': [-3.5, -3],
+  'tocharian-route': [-1.5, 2],
 }
 
 interface CulturePopupData {
   culture: Culture
+  x: number
+  y: number
+}
+
+interface BranchPopupData {
+  migration: (typeof migrations)[number]
   x: number
   y: number
 }
@@ -97,6 +103,7 @@ export default function MigrationMap() {
   const [currentDate, setCurrentDate] = useState(MIN_DATE)
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedCulture, setSelectedCulture] = useState<CulturePopupData | null>(null)
+  const [selectedBranch, setSelectedBranch] = useState<BranchPopupData | null>(null)
 
   const territoryLayerGroup = useRef<L.LayerGroup | null>(null)
   const routeLayerGroup = useRef<L.LayerGroup | null>(null)
@@ -382,19 +389,21 @@ export default function MigrationMap() {
                 html: `<div style="
                   text-align: center;
                   white-space: nowrap;
+                  cursor: pointer;
                 ">
                   <div style="
                     display: inline-block;
-                    padding: 3px 10px;
+                    padding: 4px 12px;
                     background: ${migration.color}dd;
                     color: #fff;
                     font-family: 'Source Sans 3', sans-serif;
-                    font-size: 11px;
+                    font-size: 12px;
                     font-weight: 700;
                     border-radius: 10px;
                     line-height: 1.3;
                     box-shadow: 0 1px 4px rgba(0,0,0,0.2);
                     letter-spacing: 0.02em;
+                    transition: transform 0.15s, box-shadow 0.15s;
                   ">${displayLabel}</div>
                   <div style="
                     font-family: 'Source Sans 3', sans-serif;
@@ -406,9 +415,15 @@ export default function MigrationMap() {
                   ">${dateStr}</div>
                 </div>`,
               }),
-              interactive: false,
+              interactive: true,
             }
           )
+          branchLabel.on('click', (e: L.LeafletMouseEvent) => {
+            L.DomEvent.stopPropagation(e)
+            const point = map.latLngToContainerPoint(e.latlng)
+            setSelectedBranch({ migration, x: point.x, y: point.y })
+            setSelectedCulture(null)
+          })
           labelLayerGroup.current!.addLayer(branchLabel)
         }
       }
@@ -428,6 +443,7 @@ export default function MigrationMap() {
         L.DomEvent.stopPropagation(e)
         const point = map.latLngToContainerPoint(e.latlng)
         setSelectedCulture({ culture, x: point.x, y: point.y })
+        setSelectedBranch(null)
       })
       markerLayerGroup.current!.addLayer(marker)
     })
@@ -480,7 +496,7 @@ export default function MigrationMap() {
   useEffect(() => {
     const map = mapRef.current
     if (!map) return
-    const handler = () => setSelectedCulture(null)
+    const handler = () => { setSelectedCulture(null); setSelectedBranch(null) }
     map.on('click', handler)
     return () => { map.off('click', handler) }
   }, [])
@@ -584,29 +600,31 @@ export default function MigrationMap() {
           bottom: 12,
           left: 12,
           zIndex: 1000,
-          padding: '0.75rem',
-          background: 'rgba(255, 255, 255, 0.92)',
-          backdropFilter: 'blur(8px)',
-          borderRadius: 8,
-          border: '1px solid rgba(139, 115, 85, 0.2)',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-          maxHeight: 260,
+          padding: '1rem',
+          background: 'rgba(255, 255, 255, 0.94)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: 10,
+          border: '1px solid rgba(139, 115, 85, 0.25)',
+          boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
+          maxHeight: 320,
           overflowY: 'auto',
-          maxWidth: 250,
+          minWidth: 200,
+          maxWidth: 300,
         }}>
           <div style={{
-            fontSize: '0.6rem',
-            color: '#888',
+            fontSize: '0.7rem',
+            color: '#666',
             fontFamily: 'var(--font-body)',
             textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            marginBottom: '0.4rem',
+            letterSpacing: '0.1em',
+            fontWeight: 700,
+            marginBottom: '0.6rem',
           }}>
             Migration Routes
           </div>
           {activeMigrations.length === 0 ? (
             <div style={{
-              fontSize: '0.7rem',
+              fontSize: '0.8rem',
               color: '#999',
               fontStyle: 'italic',
             }}>
@@ -619,27 +637,27 @@ export default function MigrationMap() {
                 <div key={m.id} style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.4rem',
-                  marginBottom: '0.25rem',
-                  fontSize: '0.65rem',
-                  color: isActive ? '#333' : '#888',
+                  gap: '0.5rem',
+                  marginBottom: '0.35rem',
+                  fontSize: '0.8rem',
+                  color: isActive ? '#222' : '#777',
                   fontFamily: 'var(--font-body)',
-                  fontWeight: isActive ? 600 : 400,
+                  fontWeight: isActive ? 700 : 400,
                 }}>
                   <span style={{
-                    width: 18, height: 4,
+                    width: 24, height: 5,
                     background: m.color,
                     flexShrink: 0,
-                    borderRadius: 2,
-                    opacity: isActive ? 1 : 0.6,
+                    borderRadius: 3,
+                    opacity: isActive ? 1 : 0.5,
                   }} />
                   <span style={{ lineHeight: 1.3 }}>
-                    {SHORT_LABELS[m.id] || m.branch || m.name}
+                    {(SHORT_LABELS[m.id] || m.branch || m.name).replace('\n', ' / ')}
                     {isActive && (
                       <span style={{
                         marginLeft: 4,
                         color: m.color,
-                        fontSize: '0.6rem',
+                        fontSize: '0.7rem',
                       }}>&#9654;</span>
                     )}
                   </span>
@@ -651,15 +669,16 @@ export default function MigrationMap() {
           {visibleCulturesList.length > 0 && (
             <>
               <div style={{
-                fontSize: '0.6rem',
-                color: '#888',
+                fontSize: '0.7rem',
+                color: '#666',
                 fontFamily: 'var(--font-body)',
                 textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-                marginTop: '0.5rem',
-                marginBottom: '0.3rem',
+                letterSpacing: '0.1em',
+                fontWeight: 700,
+                marginTop: '0.6rem',
+                marginBottom: '0.4rem',
                 borderTop: '1px solid rgba(0,0,0,0.1)',
-                paddingTop: '0.4rem',
+                paddingTop: '0.5rem',
               }}>
                 Active Cultures
               </div>
@@ -667,18 +686,18 @@ export default function MigrationMap() {
                 <div key={c.id} style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '0.4rem',
-                  marginBottom: '0.2rem',
-                  fontSize: '0.65rem',
-                  color: '#555',
+                  gap: '0.5rem',
+                  marginBottom: '0.3rem',
+                  fontSize: '0.8rem',
+                  color: '#444',
                   fontFamily: 'var(--font-body)',
                 }}>
                   <span style={{
-                    width: 10, height: 10,
+                    width: 12, height: 12,
                     borderRadius: 3,
                     background: c.color,
                     flexShrink: 0,
-                    opacity: 0.5,
+                    opacity: 0.7,
                     border: '1px solid rgba(0,0,0,0.15)',
                   }} />
                   {c.name.split('(')[0].trim()}
@@ -782,6 +801,66 @@ export default function MigrationMap() {
                 </div>
               </div>
             )}
+          </motion.div>
+        )}
+
+        {/* Branch popup */}
+        {selectedBranch && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              position: 'absolute',
+              top: Math.min(selectedBranch.y, 380),
+              left: Math.min(Math.max(selectedBranch.x, 180), 800),
+              transform: 'translate(-50%, -100%) translateY(-20px)',
+              zIndex: 1001,
+              width: 300,
+              padding: '1rem',
+              background: 'rgba(255, 255, 255, 0.96)',
+              backdropFilter: 'blur(12px)',
+              borderRadius: 10,
+              border: `2px solid ${selectedBranch.migration.color}66`,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.2)',
+            }}
+          >
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem',
+            }}>
+              <span style={{
+                width: 12, height: 12, borderRadius: '50%',
+                background: selectedBranch.migration.color,
+              }} />
+              <span style={{
+                fontFamily: 'var(--font-display)', fontSize: '1.1rem',
+                color: '#2C2416', fontWeight: 600,
+              }}>
+                {(SHORT_LABELS[selectedBranch.migration.id] || selectedBranch.migration.branch || '').replace('\n', ' / ')}
+              </span>
+            </div>
+            <div style={{
+              fontSize: '0.7rem', color: '#8A7E6A',
+              fontFamily: 'var(--font-body)', marginBottom: '0.25rem',
+            }}>
+              {dateToLabel(selectedBranch.migration.startDate)} to {dateToLabel(selectedBranch.migration.endDate)}
+            </div>
+            {selectedBranch.migration.branch && (
+              <div style={{
+                fontSize: '0.7rem', color: selectedBranch.migration.color,
+                fontFamily: 'var(--font-body)', fontWeight: 600, marginBottom: '0.5rem',
+              }}>
+                {selectedBranch.migration.branch}
+              </div>
+            )}
+            <p style={{
+              fontSize: '0.8rem', color: '#5A4E3A',
+              lineHeight: 1.5, fontFamily: 'var(--font-body)',
+              marginBottom: 0,
+              maxHeight: 150,
+              overflowY: 'auto',
+            }}>
+              {selectedBranch.migration.description}
+            </p>
           </motion.div>
         )}
       </div>
