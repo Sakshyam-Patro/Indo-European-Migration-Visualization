@@ -1,0 +1,368 @@
+@import "tailwindcss";
+
+/* ========================================
+   THEME VARIABLES
+   Mixed light/dark: parchment for reading,
+   dark for interactive visualizations
+   ======================================== */
+
+:root {
+  /* Primary accent colors */
+  --ochre: #B8860B;
+  --ochre-light: #D4A537;
+  --ochre-dark: #8B6914;
+  --sienna: #A0522D;
+  --sienna-light: #B8724D;
+  --bronze: #8B7355;
+  --bronze-dark: #6B5B45;
+
+  /* Interactive accent */
+  --teal: #0D7377;
+  --teal-light: #14919B;
+  --teal-dark: #0A5C5F;
+
+  /* Dark section backgrounds */
+  --bg-deep: #141820;
+  --bg-surface: #1A1F2B;
+  --bg-elevated: #222836;
+  --bg-card: #2A3040;
+
+  /* Light section backgrounds (parchment) */
+  --bg-light: #FAF6F0;
+  --bg-light-surface: #F2EDE4;
+  --bg-light-elevated: #E8E2D6;
+  --bg-light-card: #FFFFFF;
+
+  /* Dark section text */
+  --text-on-dark: #E8E2D6;
+  --text-on-dark-secondary: #B0A899;
+  --text-on-dark-muted: #7A7468;
+
+  /* Light section text */
+  --text-on-light: #2C2416;
+  --text-on-light-secondary: #5A4E3A;
+  --text-on-light-muted: #8A7E6A;
+
+  /* Backward compat aliases (default to dark) */
+  --text-primary: var(--text-on-dark);
+  --text-secondary: var(--text-on-dark-secondary);
+  --text-muted: var(--text-on-dark-muted);
+  --text-bright: #F5F0E8;
+
+  /* Fonts */
+  --font-display: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+  --font-body: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Spacing */
+  --section-gap: 6rem;
+}
+
+/* ========================================
+   BASE STYLES
+   ======================================== */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--bg-deep);
+  color: var(--text-on-light);
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ========================================
+   SECTION MODES
+   ======================================== */
+
+.section-dark {
+  background-color: var(--bg-deep);
+  color: var(--text-on-dark);
+}
+
+.section-dark h1, .section-dark h2, .section-dark h3, .section-dark h4 {
+  color: var(--text-bright);
+}
+
+.section-dark p {
+  color: var(--text-on-dark-secondary);
+}
+
+.section-dark strong {
+  color: var(--text-bright);
+}
+
+.section-dark em {
+  color: var(--ochre-light);
+}
+
+.section-light {
+  background-color: var(--bg-light);
+  color: var(--text-on-light);
+}
+
+.section-light h1, .section-light h2, .section-light h3, .section-light h4 {
+  color: var(--text-on-light);
+}
+
+.section-light h4 {
+  color: var(--ochre-dark);
+}
+
+.section-light p {
+  color: var(--text-on-light-secondary);
+}
+
+.section-light strong {
+  color: var(--text-on-light);
+}
+
+.section-light em {
+  color: var(--ochre);
+  font-style: italic;
+}
+
+/* ========================================
+   TYPOGRAPHY
+   ======================================== */
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  line-height: 1.2;
+  font-weight: 400;
+}
+
+h1 {
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 400;
+}
+
+h3 {
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  font-weight: 500;
+}
+
+h4 {
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  font-weight: 600;
+}
+
+p {
+  margin-bottom: 1.5em;
+  font-size: 1.125rem;
+}
+
+a {
+  color: var(--teal);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+a:hover {
+  color: var(--teal-light);
+}
+
+/* ========================================
+   PIE RECONSTRUCTED FORMS
+   ======================================== */
+
+.pie-form {
+  font-family: var(--font-display);
+  font-style: italic;
+  color: var(--ochre);
+  font-weight: 500;
+}
+
+.pie-asterisk {
+  color: var(--teal);
+  font-style: normal;
+}
+
+/* ========================================
+   SCROLLBAR
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-deep);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bronze);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ochre-dark);
+}
+
+/* ========================================
+   SELECTION
+   ======================================== */
+
+::selection {
+  background: var(--teal);
+  color: #fff;
+}
+
+/* ========================================
+   SECTION LAYOUT
+   ======================================== */
+
+.section-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+.section-narrow {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
+/* ========================================
+   INTERACTIVE ELEMENT GLOW
+   ======================================== */
+
+.interactive-hint {
+  position: relative;
+}
+
+.interactive-hint::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 8px;
+  border: 1px dashed var(--teal);
+  opacity: 0.4;
+  animation: pulse-border 2s ease-in-out infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.5; }
+}
+
+/* ========================================
+   LEAFLET OVERRIDES
+   ======================================== */
+
+.leaflet-container {
+  background: var(--bg-deep) !important;
+  font-family: var(--font-body) !important;
+}
+
+.culture-tooltip {
+  background: rgba(20, 24, 32, 0.9) !important;
+  border: 1px solid rgba(200, 169, 110, 0.2) !important;
+  color: var(--text-on-dark) !important;
+  font-family: var(--font-body) !important;
+  font-size: 0.75rem !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;
+}
+
+.culture-tooltip::before {
+  border-top-color: rgba(20, 24, 32, 0.9) !important;
+}
+
+/* Animated flowing dash on active migration routes */
+.migration-active {
+  animation: flowDash 1.2s linear infinite;
+}
+
+@keyframes flowDash {
+  to { stroke-dashoffset: -24; }
+}
+
+/* Pulsing territory glow */
+.territory-pulse {
+  animation: territoryPulse 3s ease-in-out infinite;
+}
+
+@keyframes territoryPulse {
+  0%, 100% { fill-opacity: 0.12; stroke-opacity: 0.35; }
+  50% { fill-opacity: 0.2; stroke-opacity: 0.55; }
+}
+
+/* Pulsing homeland ring */
+.homeland-pulse {
+  animation: homelandPulse 2s ease-in-out infinite;
+}
+
+@keyframes homelandPulse {
+  0%, 100% { r: 12; opacity: 0.3; }
+  50% { r: 20; opacity: 0; }
+}
+
+/* Arrow tip marker override */
+.leaflet-overlay-pane svg {
+  overflow: visible;
+}
+
+/* ========================================
+   UTILITY
+   ======================================== */
+
+.fade-in {
+  animation: fadeIn 0.6s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.glow-text {
+  text-shadow: 0 0 40px rgba(200, 169, 110, 0.3);
+}
+
+.teal-glow {
+  text-shadow: 0 0 30px rgba(42, 157, 143, 0.4);
+}
+
+/* ========================================
+   MOBILE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 600px) {
+  html {
+    font-size: 15px;
+  }
+
+  .section-container,
+  .section-narrow {
+    padding: 0 1.25rem;
+  }
+
+  :root {
+    --section-gap: 4rem;
+  }
+
+  .migration-map-container {
+    height: 400px !important;
+  }
+}
