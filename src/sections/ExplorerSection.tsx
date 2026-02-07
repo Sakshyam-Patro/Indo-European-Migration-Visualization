@@ -129,7 +129,7 @@ function CognateSearch() {
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder='Search for a word (e.g. "mother", "water", "three", "horse")'
+          placeholder='Search for a word (e.g. "sun", "fire", "door", "know")'
           style={{
             width: '100%',
             padding: '1rem 1.25rem 1rem 3rem',
@@ -183,7 +183,7 @@ function CognateSearch() {
           fontFamily: 'var(--font-body)',
           fontSize: '1rem',
         }}>
-          No matching cognates found for "{query}". Try words like "father", "night", "new", "wheel", or "dog".
+          No matching cognates found for "{query}". Try words like "father", "sun", "fire", "door", "know", or "eat".
         </div>
       )}
 
@@ -210,17 +210,15 @@ function CognateSearch() {
             maxWidth: 'none',
             marginBottom: 0,
           }}>
-            Try: <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('mother')}>mother</span>
-            {' '}&middot;{' '}
-            <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('water')}>water</span>
-            {' '}&middot;{' '}
-            <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('three')}>three</span>
-            {' '}&middot;{' '}
-            <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('horse')}>horse</span>
-            {' '}&middot;{' '}
-            <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('wheel')}>wheel</span>
-            {' '}&middot;{' '}
-            <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery('mead')}>mead</span>
+            Try: {[
+              'mother', 'water', 'sun', 'fire', 'three', 'horse',
+              'door', 'know', 'eat', 'stand', 'moon', 'foot',
+            ].map((word, i, arr) => (
+              <span key={word}>
+                <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery(word)}>{word}</span>
+                {i < arr.length - 1 && <>{' '}&middot;{' '}</>}
+              </span>
+            ))}
           </p>
         </div>
       )}
