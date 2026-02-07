@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mythConnections, mythCategories, type MythConnection } from '../../data/myths'
 
@@ -7,6 +7,15 @@ const CATEGORY_KEYS = Object.keys(mythCategories) as MythConnection['category'][
 export default function MythWeb() {
   const [selectedMyth, setSelectedMyth] = useState<MythConnection | null>(null)
   const [activeCategory, setActiveCategory] = useState<MythConnection['category'] | 'all'>('all')
+  const detailRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (selectedMyth && detailRef.current) {
+      setTimeout(() => {
+        detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+      }, 100)
+    }
+  }, [selectedMyth])
 
   const filtered = activeCategory === 'all'
     ? mythConnections
@@ -230,6 +239,7 @@ export default function MythWeb() {
       <AnimatePresence>
         {selectedMyth && (
           <motion.div
+            ref={detailRef}
             key={selectedMyth.id}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
