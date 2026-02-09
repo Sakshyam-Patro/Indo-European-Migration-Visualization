@@ -130,6 +130,7 @@ export default function MigrationMap() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedCulture, setSelectedCulture] = useState<CulturePopupData | null>(null)
   const [selectedBranch, setSelectedBranch] = useState<BranchPopupData | null>(null)
+  const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 768)
 
   const territoryLayerGroup = useRef<L.LayerGroup | null>(null)
   const routeLayerGroup = useRef<L.LayerGroup | null>(null)
@@ -674,109 +675,124 @@ export default function MigrationMap() {
           bottom: 12,
           left: 12,
           zIndex: 1000,
-          padding: '1rem',
+          padding: legendOpen ? '1rem' : '0.5rem 0.75rem',
           background: 'rgba(255, 255, 255, 0.94)',
           backdropFilter: 'blur(10px)',
           borderRadius: 10,
           border: '1px solid rgba(139, 115, 85, 0.25)',
           boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-          maxHeight: 320,
-          overflowY: 'auto',
-          minWidth: 200,
+          maxHeight: legendOpen ? (window.innerWidth <= 768 ? '45vh' : 320) : 'auto',
+          overflowY: legendOpen ? 'auto' : 'hidden',
+          minWidth: legendOpen ? 200 : 'auto',
           maxWidth: 300,
         }}>
-          <div style={{
-            fontSize: '0.7rem',
-            color: '#666',
-            fontFamily: 'var(--font-body)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            fontWeight: 700,
-            marginBottom: '0.6rem',
-          }}>
-            Migration Routes
-          </div>
-          {activeMigrations.length === 0 ? (
-            <div style={{
-              fontSize: '0.8rem',
-              color: '#999',
-              fontStyle: 'italic',
+          <div
+            onClick={() => setLegendOpen(!legendOpen)}
+            style={{
+              fontSize: '0.7rem',
+              color: '#666',
+              fontFamily: 'var(--font-body)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              fontWeight: 700,
+              marginBottom: legendOpen ? '0.6rem' : 0,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              userSelect: 'none',
+              gap: '0.5rem',
             }}>
-              Press play to begin...
-            </div>
-          ) : (
-            activeMigrations.map(m => {
-              const isActive = m.startDate <= currentDate && m.endDate >= currentDate
-              return (
-                <div key={m.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  marginBottom: '0.35rem',
-                  fontSize: '0.8rem',
-                  color: isActive ? '#222' : '#777',
-                  fontFamily: 'var(--font-body)',
-                  fontWeight: isActive ? 700 : 400,
-                }}>
-                  <span style={{
-                    width: 24, height: 5,
-                    background: m.color,
-                    flexShrink: 0,
-                    borderRadius: 3,
-                    opacity: isActive ? 1 : 0.5,
-                  }} />
-                  <span style={{ lineHeight: 1.3 }}>
-                    {(SHORT_LABELS[m.id] || m.branch || m.name).replace('\n', ' / ')}
-                    {isActive && (
-                      <span style={{
-                        marginLeft: 4,
-                        color: m.color,
-                        fontSize: '0.7rem',
-                      }}>&#9654;</span>
-                    )}
-                  </span>
-                </div>
-              )
-            })
-          )}
-
-          {visibleCulturesList.length > 0 && (
+            <span>Routes</span>
+            <span style={{ fontSize: '0.6rem' }}>
+              {legendOpen ? '▼' : '▶'}
+            </span>
+          </div>
+          {legendOpen && (
             <>
-              <div style={{
-                fontSize: '0.7rem',
-                color: '#666',
-                fontFamily: 'var(--font-body)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.1em',
-                fontWeight: 700,
-                marginTop: '0.6rem',
-                marginBottom: '0.4rem',
-                borderTop: '1px solid rgba(0,0,0,0.1)',
-                paddingTop: '0.5rem',
-              }}>
-                Active Cultures
-              </div>
-              {visibleCulturesList.map(c => (
-                <div key={c.id} style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  marginBottom: '0.3rem',
+              {activeMigrations.length === 0 ? (
+                <div style={{
                   fontSize: '0.8rem',
-                  color: '#444',
-                  fontFamily: 'var(--font-body)',
+                  color: '#999',
+                  fontStyle: 'italic',
                 }}>
-                  <span style={{
-                    width: 12, height: 12,
-                    borderRadius: 3,
-                    background: c.color,
-                    flexShrink: 0,
-                    opacity: 0.7,
-                    border: '1px solid rgba(0,0,0,0.15)',
-                  }} />
-                  {c.name.split('(')[0].trim()}
+                  Press play to begin...
                 </div>
-              ))}
+              ) : (
+                activeMigrations.map(m => {
+                  const isActive = m.startDate <= currentDate && m.endDate >= currentDate
+                  return (
+                    <div key={m.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginBottom: '0.35rem',
+                      fontSize: '0.8rem',
+                      color: isActive ? '#222' : '#777',
+                      fontFamily: 'var(--font-body)',
+                      fontWeight: isActive ? 700 : 400,
+                    }}>
+                      <span style={{
+                        width: 24, height: 5,
+                        background: m.color,
+                        flexShrink: 0,
+                        borderRadius: 3,
+                        opacity: isActive ? 1 : 0.5,
+                      }} />
+                      <span style={{ lineHeight: 1.3 }}>
+                        {(SHORT_LABELS[m.id] || m.branch || m.name).replace('\n', ' / ')}
+                        {isActive && (
+                          <span style={{
+                            marginLeft: 4,
+                            color: m.color,
+                            fontSize: '0.7rem',
+                          }}>&#9654;</span>
+                        )}
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+
+              {visibleCulturesList.length > 0 && (
+                <>
+                  <div style={{
+                    fontSize: '0.7rem',
+                    color: '#666',
+                    fontFamily: 'var(--font-body)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.1em',
+                    fontWeight: 700,
+                    marginTop: '0.6rem',
+                    marginBottom: '0.4rem',
+                    borderTop: '1px solid rgba(0,0,0,0.1)',
+                    paddingTop: '0.5rem',
+                  }}>
+                    Active Cultures
+                  </div>
+                  {visibleCulturesList.map(c => (
+                    <div key={c.id} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      marginBottom: '0.3rem',
+                      fontSize: '0.8rem',
+                      color: '#444',
+                      fontFamily: 'var(--font-body)',
+                    }}>
+                      <span style={{
+                        width: 12, height: 12,
+                        borderRadius: 3,
+                        background: c.color,
+                        flexShrink: 0,
+                        opacity: 0.7,
+                        border: '1px solid rgba(0,0,0,0.15)',
+                      }} />
+                      {c.name.split('(')[0].trim()}
+                    </div>
+                  ))}
+                </>
+              )}
             </>
           )}
         </div>
