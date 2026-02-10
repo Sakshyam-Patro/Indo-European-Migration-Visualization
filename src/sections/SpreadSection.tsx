@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
+import LanguagePathways from '../components/interactive/LanguagePathways'
 
 function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const ref = useRef(null)
@@ -115,6 +116,20 @@ export default function SpreadSection() {
               half of Eurasia. The answer involves horses, wagons, milk, bronze, and an
               extraordinary series of migrations that played out over millennia.
             </p>
+          </div>
+        </FadeIn>
+
+        {/* Interactive: Language Pathways */}
+        <FadeIn delay={0.1}>
+          <div style={{
+            padding: 'clamp(1.5rem, 3vw, 2.5rem)',
+            background: 'var(--bg-surface)',
+            borderRadius: 20,
+            border: '1px solid rgba(200, 169, 110, 0.1)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15)',
+            marginBottom: '4rem',
+          }}>
+            <LanguagePathways />
           </div>
         </FadeIn>
 

@@ -123,6 +123,20 @@ interface BranchPopupData {
 // Origin point for all migrations
 const PIE_HOMELAND: [number, number] = [47.5, 42.0]
 
+const GENETIC_LABELS: Record<string, string> = {
+  WHG: 'Western Hunter-Gatherer',
+  EHG: 'Eastern Hunter-Gatherer',
+  CHG: 'Caucasus Hunter-Gatherer',
+  EEF: 'Early European Farmer',
+  Steppe: 'Yamnaya-related Steppe',
+}
+
+const SPEED_OPTIONS = [
+  { label: '0.5x', value: 50 },
+  { label: '1x', value: 100 },
+  { label: '2x', value: 200 },
+]
+
 export default function MigrationMap() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
@@ -131,6 +145,9 @@ export default function MigrationMap() {
   const [selectedCulture, setSelectedCulture] = useState<CulturePopupData | null>(null)
   const [selectedBranch, setSelectedBranch] = useState<BranchPopupData | null>(null)
   const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 768)
+  const [hasInteracted, setHasInteracted] = useState(false)
+  const [animSpeed, setAnimSpeed] = useState(ANIM_SPEED)
+  const controlsRef = useRef<HTMLDivElement>(null)
 
   const territoryLayerGroup = useRef<L.LayerGroup | null>(null)
   const routeLayerGroup = useRef<L.LayerGroup | null>(null)
@@ -514,6 +531,30 @@ export default function MigrationMap() {
     updateLayers(currentDate)
   }, [currentDate, updateLayers])
 
+  // Keyboard shortcut: spacebar to play/pause
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && controlsRef.current) {
+        // Only handle if the map section is in viewport and focus isn't in an input
+        const tag = (e.target as HTMLElement).tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
+        const rect = controlsRef.current.getBoundingClientRect()
+        if (rect.top < window.innerHeight && rect.bottom > 0) {
+          e.preventDefault()
+          setHasInteracted(true)
+          if (currentDate >= MAX_DATE - 50) {
+            setCurrentDate(MIN_DATE)
+            dateRef.current = MIN_DATE
+            updateLayers(MIN_DATE)
+          }
+          setIsPlaying(p => !p)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [currentDate, updateLayers])
+
   // Animation loop
   useEffect(() => {
     if (!isPlaying) {
@@ -529,7 +570,7 @@ export default function MigrationMap() {
       const delta = timestamp - lastTime
       lastTime = timestamp
 
-      accDate += (delta / 1000) * ANIM_SPEED
+      accDate += (delta / 1000) * animSpeed
 
       if (accDate >= MAX_DATE) {
         accDate = MAX_DATE
@@ -550,7 +591,7 @@ export default function MigrationMap() {
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current)
     }
-  }, [isPlaying, updateLayers])
+  }, [isPlaying, updateLayers, animSpeed])
 
   // Close popup on map click
   useEffect(() => {
@@ -614,8 +655,8 @@ export default function MigrationMap() {
           fontSize: '1rem',
         }}>
           Press play to watch Indo-European languages spread from the homeland across
-          Eurasia. Bold arrows show migration routes, colored regions mark archaeological
-          cultures, and labels indicate the language branches that emerged.
+          Eurasia. Click any <strong style={{ color: 'var(--text-bright)' }}>route</strong> or <strong style={{ color: 'var(--text-bright)' }}>culture</strong> on
+          the map for details, including genetic ancestry breakdowns.
         </p>
         <p style={{
           color: 'var(--text-on-dark-muted)',
@@ -894,12 +935,22 @@ export default function MigrationMap() {
                 }}>
                   {Object.entries(selectedCulture.culture.geneticProfile).map(([key, value]) => {
                     if (!value) return null
+                    const colors: Record<string, string> = {
+                      WHG: '#4A90D9', EHG: '#7BB3E0', CHG: '#9B59B6',
+                      EEF: '#27AE60', Steppe: '#E67E22',
+                    }
                     return (
-                      <span key={key} style={{
+                      <span key={key} title={GENETIC_LABELS[key] || key} style={{
                         fontSize: '0.55rem', color: '#8A7E6A',
                         fontFamily: 'var(--font-body)',
+                        display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                       }}>
-                        {key} {value}%
+                        <span style={{
+                          width: 6, height: 6, borderRadius: 2,
+                          background: colors[key] || '#888',
+                          flexShrink: 0,
+                        }} />
+                        {GENETIC_LABELS[key] || key} {value}%
                       </span>
                     )
                   })}
@@ -986,7 +1037,7 @@ export default function MigrationMap() {
       </div>
 
       {/* Controls */}
-      <div style={{
+      <div ref={controlsRef} style={{
         marginTop: '1rem',
         padding: '1rem 1.25rem',
         background: 'rgba(26, 31, 43, 0.5)',
@@ -994,29 +1045,42 @@ export default function MigrationMap() {
         border: '1px solid rgba(139, 115, 85, 0.2)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-          <button
-            onClick={() => {
-              if (currentDate >= MAX_DATE - 50) {
-                setCurrentDate(MIN_DATE)
-                dateRef.current = MIN_DATE
-                updateLayers(MIN_DATE)
-              }
-              setIsPlaying(!isPlaying)
-            }}
-            aria-label={isPlaying ? 'Pause animation' : 'Play animation'}
-            style={{
-              width: 44, height: 44, borderRadius: '50%',
-              border: '2px solid var(--ochre-dark)',
-              background: isPlaying ? 'rgba(200, 169, 110, 0.15)' : 'rgba(200, 169, 110, 0.08)',
-              color: 'var(--ochre)',
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: '1.1rem', flexShrink: 0,
-              transition: 'all 0.2s',
-            }}
-          >
-            {isPlaying ? '⏸' : '▶'}
-          </button>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            {!hasInteracted && !isPlaying && (
+              <span style={{
+                position: 'absolute',
+                inset: -4,
+                borderRadius: '50%',
+                border: '2px solid var(--ochre)',
+                animation: 'migration-pulse 2s ease-in-out infinite',
+                pointerEvents: 'none',
+              }} />
+            )}
+            <button
+              onClick={() => {
+                setHasInteracted(true)
+                if (currentDate >= MAX_DATE - 50) {
+                  setCurrentDate(MIN_DATE)
+                  dateRef.current = MIN_DATE
+                  updateLayers(MIN_DATE)
+                }
+                setIsPlaying(!isPlaying)
+              }}
+              aria-label={isPlaying ? 'Pause animation' : 'Play animation'}
+              style={{
+                width: 44, height: 44, borderRadius: '50%',
+                border: '2px solid var(--ochre-dark)',
+                background: isPlaying ? 'rgba(200, 169, 110, 0.15)' : 'rgba(200, 169, 110, 0.08)',
+                color: 'var(--ochre)',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.1rem', flexShrink: 0,
+                transition: 'all 0.2s',
+              }}
+            >
+              {isPlaying ? '⏸' : '▶'}
+            </button>
+          </div>
 
           <input
             type="range"
@@ -1025,6 +1089,7 @@ export default function MigrationMap() {
             step={25}
             value={currentDate}
             onChange={(e) => {
+              setHasInteracted(true)
               const val = Number(e.target.value)
               setCurrentDate(val)
               dateRef.current = val
@@ -1043,17 +1108,59 @@ export default function MigrationMap() {
           </span>
         </div>
 
+        {/* Speed + status row */}
         <div style={{
-          marginTop: '0.5rem', fontSize: '0.7rem',
-          color: 'var(--text-on-dark-muted)', fontFamily: 'var(--font-body)',
-          textAlign: 'center',
+          marginTop: '0.75rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '1rem',
         }}>
-          {currentDate >= MAX_DATE - 50
-            ? 'All major IE migration routes shown. Click cultures for details.'
-            : isPlaying
-              ? `Playing · ${ANIM_SPEED} years/second`
-              : 'Drag the slider or press play'}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.4rem',
+          }}>
+            {SPEED_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setAnimSpeed(opt.value)}
+                aria-label={`Set speed to ${opt.label}`}
+                style={{
+                  padding: '0.35rem 0.75rem',
+                  fontSize: '0.85rem',
+                  fontFamily: 'var(--font-body)',
+                  fontWeight: animSpeed === opt.value ? 700 : 400,
+                  color: animSpeed === opt.value ? 'var(--ochre)' : 'var(--text-on-dark-muted)',
+                  background: animSpeed === opt.value ? 'rgba(200, 169, 110, 0.15)' : 'transparent',
+                  border: `1px solid ${animSpeed === opt.value ? 'rgba(200, 169, 110, 0.4)' : 'rgba(255,255,255,0.15)'}`,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span style={{
+            fontSize: '0.9rem',
+            color: 'var(--text-on-dark-secondary)',
+            fontFamily: 'var(--font-body)',
+          }}>
+            {currentDate >= MAX_DATE - 50
+              ? 'Click routes or cultures for details'
+              : isPlaying
+                ? 'Playing'
+                : !hasInteracted
+                  ? 'Press play or spacebar to begin'
+                  : 'Drag the slider or press play'}
+          </span>
         </div>
+        <style>{`
+          @keyframes migration-pulse {
+            0%, 100% { opacity: 0.3; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.15); }
+          }
+        `}</style>
       </div>
     </div>
   )
