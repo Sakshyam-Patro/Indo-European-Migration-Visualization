@@ -86,6 +86,21 @@ export default function DNASection() {
               almost perfectly onto the regions where Indo-European languages are spoken today.
               Linguistics, archaeology, and genetics had finally converged on the same story.
             </p>
+            <p style={{
+              color: 'var(--text-on-light-secondary)',
+              fontSize: '1.125rem',
+              lineHeight: 1.7,
+            }}>
+              The pattern is strikingly consistent: wherever steppe DNA appears in the
+              archaeological record, Indo-European languages follow within generations. In
+              Britain, Bell Beaker migrants replaced roughly 90% of the Neolithic gene pool
+              and brought a Celtic tongue. In Greece, the ~15% steppe component that
+              distinguishes Mycenaeans from Minoans marks the arrival of the Greek language.
+              In South Asia, steppe ancestry appears only after the decline of the Indus
+              Valley Civilization, coinciding with the earliest Vedic Sanskrit texts. DNA
+              does not tell us what language someone spoke, but it reveals the migrations
+              that carried those languages across continents.
+            </p>
           </div>
         </FadeIn>
 

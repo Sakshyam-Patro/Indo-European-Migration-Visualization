@@ -3,11 +3,11 @@ import { geneticSamples, dnaFindings } from '../../data/genetics'
 
 /** Ancestry component keys and their display colors */
 const COMPONENTS = [
-  { key: 'whg' as const, label: 'WHG (Western Hunter-Gatherer)', color: '#3498DB' },
-  { key: 'ehg' as const, label: 'EHG (Eastern Hunter-Gatherer)', color: '#1ABC9C' },
-  { key: 'anf' as const, label: 'ANF (Anatolian Neolithic Farmer)', color: '#E67E22' },
-  { key: 'steppe' as const, label: 'Steppe', color: '#E74C3C' },
-  { key: 'other' as const, label: 'Other', color: '#95A5A6' },
+  { key: 'whg' as const, label: 'Western Hunter-Gatherer', color: '#3498DB', description: 'Europe\u2019s original foragers, living there since the Ice Age' },
+  { key: 'ehg' as const, label: 'Eastern Hunter-Gatherer', color: '#1ABC9C', description: 'Foragers from Russia and the eastern Baltic region' },
+  { key: 'anf' as const, label: 'Anatolian Farmer', color: '#E67E22', description: 'The people who brought agriculture from modern-day Turkey into Europe' },
+  { key: 'steppe' as const, label: 'Steppe Pastoralist', color: '#E74C3C', description: 'Herders from the Pontic-Caspian steppe \u2014 the people most closely linked to Indo-European language spread' },
+  { key: 'other' as const, label: 'Other', color: '#95A5A6', description: 'Region-specific ancestry such as Caucasus hunter-gatherers, Ancient South Indians, or Levantine groups' },
 ]
 
 /** Parse a date string like "~3000 BCE" or "Present" into a sortable number */
@@ -95,26 +95,30 @@ export default function AncestryChart() {
           fontSize: '1rem',
           marginBottom: 0,
         }}>
-          Each bar shows the genetic ancestry composition of an ancient individual.
-          Hover over any segment to see the exact percentage. Samples are ordered
-          from oldest (top) to most recent (bottom).
+          Each bar shows the genetic makeup of an ancient individual — what
+          percentage of their DNA came from different ancestral populations.
+          Watch how the red steppe component appears suddenly around 3000 BCE
+          and persists into the present. Hover over any segment for exact
+          percentages.
         </p>
       </div>
 
-      {/* Color legend */}
+      {/* Color legend with descriptions */}
       <div style={{
-        display: 'flex',
-        gap: '1.5rem',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))',
+        gap: '0.75rem',
         marginBottom: '1.5rem',
-        flexWrap: 'wrap',
+        padding: '1rem',
+        background: 'rgba(20, 24, 32, 0.4)',
+        borderRadius: 10,
+        border: '1px solid rgba(200, 169, 110, 0.08)',
       }}>
         {COMPONENTS.map(comp => (
           <div key={comp.key} style={{
             display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            fontSize: '0.75rem',
-            color: 'var(--text-on-dark-muted)',
+            alignItems: 'flex-start',
+            gap: '0.5rem',
             fontFamily: 'var(--font-body)',
           }}>
             <span style={{
@@ -124,8 +128,24 @@ export default function AncestryChart() {
               background: comp.color,
               display: 'inline-block',
               flexShrink: 0,
+              marginTop: 4,
             }} />
-            {comp.label}
+            <div>
+              <div style={{
+                fontSize: '0.8rem',
+                color: 'var(--text-on-dark)',
+                fontWeight: 600,
+              }}>
+                {comp.label}
+              </div>
+              <div style={{
+                fontSize: '0.7rem',
+                color: 'var(--text-on-dark-muted)',
+                lineHeight: 1.4,
+              }}>
+                {comp.description}
+              </div>
+            </div>
           </div>
         ))}
       </div>
