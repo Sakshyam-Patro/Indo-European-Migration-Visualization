@@ -581,10 +581,11 @@ export default function LanguageTree() {
       {selectedNode && (
         <div style={{
           marginTop: '1rem',
-          padding: '1rem 1.25rem',
-          background: 'rgba(26, 31, 43, 0.6)',
+          padding: '1.25rem 1.5rem',
+          background: 'rgba(26, 31, 43, 0.85)',
           borderRadius: 12,
-          border: '1px solid rgba(139, 115, 85, 0.2)',
+          border: '1px solid rgba(200, 169, 110, 0.2)',
+          borderLeft: '3px solid var(--ochre)',
           display: 'flex',
           gap: '1.5rem',
           flexWrap: 'wrap',
@@ -622,9 +623,9 @@ export default function LanguageTree() {
             {selectedNode.note && (
               <p style={{
                 fontSize: '0.85rem',
-                color: 'var(--text-on-dark-secondary)',
+                color: '#D5CFC3',
                 fontFamily: 'var(--font-body)',
-                lineHeight: 1.5,
+                lineHeight: 1.6,
                 maxWidth: '60ch',
               }}>
                 {selectedNode.note}
