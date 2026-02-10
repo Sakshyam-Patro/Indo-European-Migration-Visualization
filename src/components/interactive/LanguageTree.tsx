@@ -68,7 +68,7 @@ export default function LanguageTree() {
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
         const w = entry.contentRect.width
-        dimensionsRef.current = { width: w, height: Math.max(500, Math.min(800, w * 0.55)) }
+        dimensionsRef.current = { width: w, height: Math.max(500, Math.min(650, w * 0.6)) }
       }
       if (isFirst) {
         isFirst = false
