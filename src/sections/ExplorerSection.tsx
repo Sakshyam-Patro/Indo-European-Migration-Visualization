@@ -17,8 +17,17 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
   )
 }
 
-function CognateSearchResult({ entry }: { entry: CognateEntry }) {
+function CognateSearchResult({ entry, query }: { entry: CognateEntry; query: string }) {
   const languages = Object.entries(entry.forms)
+  const [copied, setCopied] = useState(false)
+
+  const handleShare = () => {
+    const url = `${window.location.origin}${window.location.pathname}#explorer?q=${encodeURIComponent(query)}`
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
 
   return (
     <div style={{
@@ -28,26 +37,47 @@ function CognateSearchResult({ entry }: { entry: CognateEntry }) {
       padding: 'clamp(1.25rem, 2.5vw, 2rem)',
       marginBottom: '1.5rem',
     }}>
-      {/* Header: PIE root and meaning */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        <span style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(1.3rem, 2.5vw, 1.6rem)',
-          fontStyle: 'italic',
-          color: 'var(--ochre-light)',
-          fontWeight: 500,
-        }}>
-          <span style={{ color: 'var(--teal-light)' }}>*</span>
-          {entry.pieRoot.replace(/^\*/, '')}
-        </span>
-        <span style={{
-          marginLeft: '0.75rem',
-          fontFamily: 'var(--font-body)',
-          fontSize: '1rem',
-          color: 'var(--text-on-dark-secondary)',
-        }}>
-          "{entry.meaning}"
-        </span>
+      {/* Header: PIE root, meaning, and share button */}
+      <div style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+        <div>
+          <span style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'clamp(1.3rem, 2.5vw, 1.6rem)',
+            fontStyle: 'italic',
+            color: 'var(--ochre-light)',
+            fontWeight: 500,
+          }}>
+            <span style={{ color: 'var(--teal-light)' }}>*</span>
+            {entry.pieRoot.replace(/^\*/, '')}
+          </span>
+          <span style={{
+            marginLeft: '0.75rem',
+            fontFamily: 'var(--font-body)',
+            fontSize: '1rem',
+            color: 'var(--text-on-dark-secondary)',
+          }}>
+            "{entry.meaning}"
+          </span>
+        </div>
+        <button
+          onClick={handleShare}
+          style={{
+            background: copied ? 'rgba(39, 174, 96, 0.15)' : 'rgba(13, 115, 119, 0.1)',
+            border: `1px solid ${copied ? 'rgba(39, 174, 96, 0.3)' : 'rgba(13, 115, 119, 0.25)'}`,
+            borderRadius: 6,
+            color: copied ? '#27AE60' : 'var(--teal-light)',
+            cursor: 'pointer',
+            padding: '0.3rem 0.7rem',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-body)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {copied ? 'Copied!' : 'Share'}
+        </button>
       </div>
 
       {/* Language forms grid */}
@@ -106,7 +136,12 @@ function CognateSearchResult({ entry }: { entry: CognateEntry }) {
 }
 
 function CognateSearch() {
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(() => {
+    // Read query from URL hash (e.g. #explorer?q=father)
+    const hash = window.location.hash
+    const match = hash.match(/[?&]q=([^&]+)/)
+    return match ? decodeURIComponent(match[1]) : ''
+  })
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -188,7 +223,7 @@ function CognateSearch() {
       )}
 
       {results.map(entry => (
-        <CognateSearchResult key={entry.pieRoot} entry={entry} />
+        <CognateSearchResult key={entry.pieRoot} entry={entry} query={query} />
       ))}
 
       {/* Hint when empty */}

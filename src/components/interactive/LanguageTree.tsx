@@ -46,6 +46,155 @@ function diagonal(s: { x: number; y: number }, d: { x: number; y: number }): str
             ${d.y} ${d.x}`
 }
 
+/** Mobile-friendly collapsible list view for small screens */
+function MobileTreeNode({ node, depth, branchName }: { node: LanguageNode; depth: number; branchName?: string }) {
+  const [expanded, setExpanded] = useState(depth === 0)
+  const hasChildren = node.children && node.children.length > 0
+  const color = (depth === 1 && node.name in BRANCH_COLORS)
+    ? BRANCH_COLORS[node.name]
+    : branchName ? (BRANCH_COLORS[branchName] || '#8B7355') : '#D4A537'
+  const statusColor = STATUS_COLORS[node.status || 'living']
+  const currentBranch = depth === 1 ? node.name : branchName
+
+  return (
+    <div style={{ marginLeft: depth === 0 ? 0 : 16 }}>
+      <button
+        onClick={() => hasChildren ? setExpanded(!expanded) : undefined}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          width: '100%',
+          textAlign: 'left',
+          background: 'none',
+          border: 'none',
+          cursor: hasChildren ? 'pointer' : 'default',
+          padding: '0.4rem 0.25rem',
+          borderRadius: 6,
+        }}
+      >
+        {/* Expand/collapse indicator */}
+        {hasChildren ? (
+          <span style={{
+            width: 16, height: 16, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: '0.7rem', fontWeight: 700,
+            color, borderRadius: 3,
+            background: `${color}22`,
+          }}>
+            {expanded ? '\u2212' : '+'}
+          </span>
+        ) : (
+          <span style={{
+            width: 8, height: 8, flexShrink: 0,
+            borderRadius: '50%', background: statusColor,
+            marginLeft: 4, marginRight: 4,
+          }} />
+        )}
+
+        {/* Node name */}
+        <span style={{
+          fontFamily: depth <= 1 ? 'var(--font-display)' : 'var(--font-body)',
+          fontSize: depth === 0 ? '1rem' : depth === 1 ? '0.9rem' : '0.8rem',
+          fontWeight: depth <= 1 ? 600 : 400,
+          fontStyle: node.status === 'reconstructed' ? 'italic' : 'normal',
+          color: node.status === 'reconstructed' ? '#D4A537'
+            : node.status === 'extinct' ? '#95A5A6'
+            : '#E8E2D6',
+        }}>
+          {node.status === 'reconstructed' ? `*${node.name}` : node.name}
+        </span>
+
+        {/* Period badge */}
+        {node.period && depth <= 2 && (
+          <span style={{
+            fontSize: '0.6rem',
+            color: 'var(--text-on-dark-muted)',
+            fontFamily: 'var(--font-body)',
+            opacity: 0.7,
+          }}>
+            {node.period}
+          </span>
+        )}
+      </button>
+
+      {/* Children */}
+      {expanded && hasChildren && (
+        <div style={{
+          borderLeft: depth >= 1 ? `2px solid ${color}33` : 'none',
+          marginLeft: depth === 0 ? 0 : 7,
+        }}>
+          {node.children!.map(child => (
+            <MobileTreeNode key={child.name} node={child} depth={depth + 1} branchName={currentBranch} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MobileLanguageTree() {
+  return (
+    <div style={{ width: '100%' }}>
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '0.5rem',
+        padding: '0.3rem 0.8rem',
+        background: 'rgba(13, 115, 119, 0.15)',
+        border: '1px solid rgba(13, 115, 119, 0.3)',
+        borderRadius: 20,
+        marginBottom: '0.75rem',
+        fontSize: '0.75rem',
+        color: 'var(--teal-light)',
+        fontFamily: 'var(--font-body)',
+        textTransform: 'uppercase',
+        letterSpacing: '0.1em',
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal-light)', display: 'inline-block' }} />
+        Interactive
+      </div>
+      <h3 style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: '1.4rem',
+        color: 'var(--text-bright)',
+        marginBottom: '0.5rem',
+      }}>
+        Indo-European Language Tree
+      </h3>
+      <p style={{
+        color: 'var(--text-on-dark-secondary)',
+        fontSize: '0.85rem',
+        marginBottom: '1rem',
+      }}>
+        Tap any branch to expand or collapse it.
+      </p>
+
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap', fontSize: '0.75rem', fontFamily: 'var(--font-body)', color: 'var(--text-on-dark-muted)' }}>
+        {Object.entries(STATUS_COLORS).map(([status, color]) => (
+          <div key={status} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: color, display: 'inline-block' }} />
+            {status.charAt(0).toUpperCase() + status.slice(1)}
+          </div>
+        ))}
+      </div>
+
+      {/* Tree as nested list */}
+      <div style={{
+        maxHeight: '60vh',
+        overflowY: 'auto',
+        padding: '0.5rem',
+        borderRadius: 10,
+        background: 'var(--bg-elevated)',
+        border: '1px solid rgba(139, 115, 85, 0.2)',
+      }}>
+        <MobileTreeNode node={languageTree} depth={0} />
+      </div>
+    </div>
+  )
+}
+
 export default function LanguageTree() {
   const svgRef = useRef<SVGSVGElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -56,8 +205,16 @@ export default function LanguageTree() {
   const fitToViewRef = useRef<((paddingX?: number, duration?: number) => void) | null>(null)
   const dimensionsRef = useRef({ width: 900, height: 600 })
   const [selectedNode, setSelectedNode] = useState<LanguageNode | null>(null)
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 600)
   // Only used to trigger the initial render; resize effect reads from ref
   const [, setDimTick] = useState(0)
+
+  // Track mobile breakpoint on resize
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 600)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   // Responsive sizing — store in ref, bump tick for initial render only
   useEffect(() => {
@@ -451,6 +608,10 @@ export default function LanguageTree() {
     collapse(rootRef.current)
     updateFnRef.current(rootRef.current)
   }, [])
+
+  if (isMobile) {
+    return <MobileLanguageTree />
+  }
 
   return (
     <div style={{ width: '100%' }}>

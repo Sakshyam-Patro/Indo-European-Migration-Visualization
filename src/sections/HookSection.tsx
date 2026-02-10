@@ -82,9 +82,16 @@ export default function HookSection() {
 
   useEffect(() => {
     if (hasInteracted) return
+    if (activeWordIndex >= WORD_CHAIN.length - 1) {
+      // Reached PIE — reveal stats after a short pause
+      const timer = setTimeout(() => setShowStats(true), 800)
+      return () => clearTimeout(timer)
+    }
+    // Auto-advance: first step waits longer, then speeds up
+    const delay = activeWordIndex === 0 ? 2200 : 1200
     const timer = setTimeout(() => {
-      if (activeWordIndex === 0) setActiveWordIndex(1)
-    }, 3500)
+      setActiveWordIndex(prev => prev + 1)
+    }, delay)
     return () => clearTimeout(timer)
   }, [hasInteracted, activeWordIndex])
 
