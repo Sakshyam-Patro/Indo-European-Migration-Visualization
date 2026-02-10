@@ -144,10 +144,9 @@ export default function SoundShiftMachine() {
         {SHIFT_GROUPS[activeGroup].label.split(' → ').map(term => (
           PHONETIC_GLOSSARY[term] ? (
             <div key={term} style={{
-              fontSize: '0.72rem',
+              fontSize: '0.8rem',
               color: 'var(--text-on-dark-muted)',
               fontFamily: 'var(--font-body)',
-              opacity: 0.75,
               lineHeight: 1.4,
               flex: '1 1 200px',
             }}>
@@ -227,7 +226,7 @@ export default function SoundShiftMachine() {
                 </span>
               </div>
               <div style={{
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 color: 'var(--text-on-dark-muted)',
                 fontFamily: 'var(--font-body)',
                 textTransform: 'uppercase',
@@ -257,7 +256,7 @@ export default function SoundShiftMachine() {
             }}
           >
             <div style={{
-              fontSize: '0.7rem',
+              fontSize: '0.75rem',
               color: 'var(--text-on-dark-muted)',
               fontFamily: 'var(--font-body)',
               textTransform: 'uppercase',
@@ -292,7 +291,7 @@ export default function SoundShiftMachine() {
                   {selectedShift.shifts[0].example.pie}
                 </div>
                 <div style={{
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   color: 'var(--text-on-dark-muted)',
                   marginTop: '0.3rem',
                   fontFamily: 'var(--font-body)',
@@ -335,7 +334,7 @@ export default function SoundShiftMachine() {
                   }} />
                 </motion.div>
                 <span style={{
-                  fontSize: '0.6rem',
+                  fontSize: '0.7rem',
                   color: 'var(--ochre-dark)',
                   fontFamily: 'var(--font-body)',
                   letterSpacing: '0.05em',
@@ -360,7 +359,7 @@ export default function SoundShiftMachine() {
                   {selectedShift.shifts[0].example.daughter}
                 </div>
                 <div style={{
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   color: 'var(--text-on-dark-muted)',
                   marginTop: '0.3rem',
                   fontFamily: 'var(--font-body)',
@@ -378,7 +377,7 @@ export default function SoundShiftMachine() {
                 borderTop: '1px solid rgba(139, 115, 85, 0.2)',
               }}>
                 <div style={{
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   color: 'var(--text-on-dark-muted)',
                   marginBottom: '0.75rem',
                   fontFamily: 'var(--font-body)',
@@ -401,7 +400,7 @@ export default function SoundShiftMachine() {
                       >
                         {s.example.daughter}
                         <span style={{
-                          fontSize: '0.6rem',
+                          fontSize: '0.7rem',
                           color: 'var(--text-on-dark-muted)',
                           marginLeft: '0.4rem',
                           fontFamily: 'var(--font-body)',

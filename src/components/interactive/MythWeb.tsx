@@ -180,7 +180,7 @@ export default function MythWeb() {
                   borderRadius: 12,
                   background: `${cat.color}20`,
                   border: `1px solid ${cat.color}40`,
-                  fontSize: '0.65rem',
+                  fontSize: '0.7rem',
                   fontFamily: 'var(--font-body)',
                   color: cat.color,
                   textTransform: 'uppercase',
@@ -220,12 +220,11 @@ export default function MythWeb() {
                 {/* Culture count hint */}
                 <span style={{
                   fontFamily: 'var(--font-body)',
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   color: 'var(--text-on-dark-muted)',
                   marginTop: 'auto',
                   paddingTop: '0.4rem',
                   borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-                  opacity: 0.7,
                 }}>
                   {myth.cultures.length} culture{myth.cultures.length !== 1 ? 's' : ''} compared
                 </span>
@@ -270,7 +269,7 @@ export default function MythWeb() {
                     borderRadius: 12,
                     background: `${mythCategories[selectedMyth.category].color}20`,
                     border: `1px solid ${mythCategories[selectedMyth.category].color}40`,
-                    fontSize: '0.65rem',
+                    fontSize: '0.7rem',
                     fontFamily: 'var(--font-body)',
                     color: mythCategories[selectedMyth.category].color,
                     textTransform: 'uppercase',
@@ -332,7 +331,7 @@ export default function MythWeb() {
               {/* Culture comparisons */}
               <h4 style={{
                 fontFamily: 'var(--font-body)',
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 color: 'var(--text-on-dark-muted)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.15em',
@@ -360,7 +359,7 @@ export default function MythWeb() {
                   >
                     <span style={{
                       fontFamily: 'var(--font-body)',
-                      fontSize: '0.65rem',
+                      fontSize: '0.7rem',
                       color: 'var(--text-on-dark-muted)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.1em',

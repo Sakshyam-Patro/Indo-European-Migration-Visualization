@@ -211,8 +211,8 @@ export default function Timeline() {
               margin: '0 auto',
             }} />
             <span style={{
-              fontSize: '0.65rem',
-              color: 'rgba(255, 255, 255, 0.7)',
+              fontSize: '0.7rem',
+              color: 'rgba(255, 255, 255, 0.85)',
               fontFamily: 'var(--font-body)',
               whiteSpace: 'nowrap',
               fontWeight: 500,
@@ -239,7 +239,7 @@ export default function Timeline() {
             top: -20,
             left: '50%',
             transform: 'translateX(-50%)',
-            fontSize: '0.65rem',
+            fontSize: '0.7rem',
             color: 'var(--ochre)',
             fontFamily: 'var(--font-body)',
             whiteSpace: 'nowrap',
@@ -325,7 +325,7 @@ export default function Timeline() {
                   background: 'rgba(10, 12, 18, 0.95)',
                   border: `1px solid ${CATEGORY_COLORS[event.category]}50`,
                   borderRadius: 8,
-                  fontSize: '0.7rem',
+                  fontSize: '0.75rem',
                   fontFamily: 'var(--font-body)',
                   color: 'var(--text-bright)',
                   whiteSpace: 'nowrap',
@@ -397,7 +397,7 @@ export default function Timeline() {
                 </span>
                 <span style={{
                   fontFamily: 'var(--font-body)',
-                  fontSize: '0.65rem',
+                  fontSize: '0.7rem',
                   color: CATEGORY_COLORS[selectedEvent.category],
                   textTransform: 'uppercase',
                   letterSpacing: '0.08em',

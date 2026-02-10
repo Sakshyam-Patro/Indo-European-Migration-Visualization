@@ -119,9 +119,8 @@ export default function CognateExplorer() {
           justifyContent: 'center',
           width: 18,
           height: 18,
-          fontSize: '0.7rem',
+          fontSize: '0.75rem',
           color: 'var(--text-on-dark-muted)',
-          opacity: 0.5,
           fontFamily: 'var(--font-display)',
         }}>
           –
@@ -141,7 +140,7 @@ export default function CognateExplorer() {
       }}>
         <div style={{
           padding: '0.6rem 0.5rem',
-          fontSize: '0.7rem',
+          fontSize: '0.75rem',
           color: 'var(--text-on-dark-muted)',
           fontFamily: 'var(--font-body)',
           textTransform: 'uppercase',
@@ -156,7 +155,7 @@ export default function CognateExplorer() {
             onMouseLeave={() => setHoveredLang(null)}
             style={{
               padding: '0.6rem 0.4rem',
-              fontSize: '0.65rem',
+              fontSize: '0.7rem',
               color: hoveredLang === lang ? LANG_COLORS[lang] : 'var(--text-on-dark-muted)',
               fontFamily: 'var(--font-body)',
               textTransform: 'uppercase',
@@ -232,14 +231,14 @@ export default function CognateExplorer() {
                       padding: '0.6rem 0.4rem',
                       textAlign: 'center',
                       fontFamily: 'var(--font-display)',
-                      fontSize: isNotAttested ? '0.7rem' : '0.9rem',
+                      fontSize: isNotAttested ? '0.75rem' : '0.9rem',
                       color: isNotAttested
                         ? 'var(--text-on-dark-muted)'
                         : isSelected
                           ? LANG_COLORS[lang]
                           : 'var(--text-on-dark)',
                       fontStyle: 'normal',
-                      opacity: isNotAttested ? 0.4 : (hoveredLang === lang ? 1 : 0.85),
+                      opacity: isNotAttested ? 0.6 : (hoveredLang === lang ? 1 : 0.85),
                       transition: 'color 0.2s, opacity 0.2s',
                       background: hoveredLang === lang
                         ? 'rgba(255,255,255,0.03)'
@@ -338,7 +337,7 @@ export default function CognateExplorer() {
                     >
                       {shortForm(form)}
                       <span style={{
-                        fontSize: '0.65rem',
+                        fontSize: '0.7rem',
                         color: 'var(--text-on-dark-muted)',
                         marginLeft: '0.4rem',
                         fontFamily: 'var(--font-body)',
@@ -368,7 +367,7 @@ export default function CognateExplorer() {
                     border: '1px solid rgba(255,255,255,0.05)',
                   }}>
                     <div style={{
-                      fontSize: '0.7rem',
+                      fontSize: '0.75rem',
                       color: 'var(--text-on-dark-muted)',
                       fontFamily: 'var(--font-body)',
                       textTransform: 'uppercase',
@@ -383,9 +382,8 @@ export default function CognateExplorer() {
                         color: 'var(--text-on-dark-muted)',
                         fontFamily: 'var(--font-body)',
                         lineHeight: 1.5,
-                        opacity: 0.7,
                       }}>
-                        <span style={{ color: LANG_COLORS[lang], opacity: 0.6 }}>{lang}</span>
+                        <span style={{ color: LANG_COLORS[lang], opacity: 0.75 }}>{lang}</span>
                         {reason && <span> — {reason}</span>}
                       </div>
                     ))}

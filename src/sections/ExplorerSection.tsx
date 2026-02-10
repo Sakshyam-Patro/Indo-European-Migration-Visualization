@@ -450,7 +450,6 @@ export default function ExplorerSection() {
                 color: 'var(--text-on-dark-muted)',
                 fontSize: '0.75rem',
                 fontFamily: 'var(--font-body)',
-                opacity: 0.7,
               }}>
                 If you enjoyed this, consider supporting the project
               </span>
@@ -507,7 +506,6 @@ export default function ExplorerSection() {
                     color: 'var(--text-on-dark-muted)',
                     fontSize: '0.75rem',
                     fontFamily: 'var(--font-body)',
-                    opacity: 0.7,
                   }}
                 >
                   {ref}
@@ -519,7 +517,7 @@ export default function ExplorerSection() {
               color: 'var(--text-on-dark-muted)',
               fontSize: '0.75rem',
               marginTop: '1rem',
-              opacity: 0.5,
+              opacity: 0.8,
               marginBottom: 0,
             }}>
               All reconstructed PIE forms follow standard notation. Asterisk (*) marks unattested reconstructions.
@@ -528,7 +526,7 @@ export default function ExplorerSection() {
               color: 'var(--text-on-dark-muted)',
               fontSize: '0.75rem',
               marginTop: '0.75rem',
-              opacity: 0.5,
+              opacity: 0.8,
               marginBottom: 0,
               maxWidth: '60ch',
               marginLeft: 'auto',

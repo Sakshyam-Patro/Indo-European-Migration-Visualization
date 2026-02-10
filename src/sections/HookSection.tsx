@@ -366,7 +366,7 @@ export default function HookSection() {
                   </div>
                   <div style={{
                     fontFamily: 'var(--font-body)',
-                    fontSize: '0.7rem',
+                    fontSize: '0.75rem',
                     color: 'var(--text-on-dark-muted)',
                     marginTop: '0.4rem',
                     textTransform: 'uppercase',

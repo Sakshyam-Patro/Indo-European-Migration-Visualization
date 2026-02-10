@@ -35,13 +35,13 @@
 
   /* Dark section text */
   --text-on-dark: #E8E2D6;
-  --text-on-dark-secondary: #B0A899;
-  --text-on-dark-muted: #7A7468;
+  --text-on-dark-secondary: #C0B8A9;
+  --text-on-dark-muted: #9A9488;
 
   /* Light section text */
   --text-on-light: #2C2416;
   --text-on-light-secondary: #5A4E3A;
-  --text-on-light-muted: #8A7E6A;
+  --text-on-light-muted: #706454;
 
   /* Backward compat aliases (default to dark) */
   --text-primary: var(--text-on-dark);
@@ -279,7 +279,7 @@ a:hover {
   border: 1px solid rgba(200, 169, 110, 0.2) !important;
   color: var(--text-on-dark) !important;
   font-family: var(--font-body) !important;
-  font-size: 0.75rem !important;
+  font-size: 0.8rem !important;
   padding: 4px 8px !important;
   border-radius: 6px !important;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4) !important;

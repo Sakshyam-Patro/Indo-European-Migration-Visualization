@@ -387,7 +387,6 @@ export default function LanguagePathways() {
                 fontFamily: 'var(--font-body)',
                 marginBottom: '0.75rem',
                 fontStyle: 'italic',
-                opacity: 0.7,
               }}>
                 Click any step to expand it, or use the buttons below.
               </p>

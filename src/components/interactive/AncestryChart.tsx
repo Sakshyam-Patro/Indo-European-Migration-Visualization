@@ -139,7 +139,7 @@ export default function AncestryChart() {
                 {comp.label}
               </div>
               <div style={{
-                fontSize: '0.7rem',
+                fontSize: '0.75rem',
                 color: 'var(--text-on-dark-muted)',
                 lineHeight: 1.4,
               }}>
@@ -171,7 +171,7 @@ export default function AncestryChart() {
                   dominantBaseline="central"
                   style={{
                     fontFamily: 'var(--font-body)',
-                    fontSize: containerWidth < 600 ? '0.6rem' : '0.72rem',
+                    fontSize: containerWidth < 600 ? '0.75rem' : '0.8rem',
                     fill: 'var(--text-on-dark-secondary)',
                   }}
                 >
@@ -184,7 +184,7 @@ export default function AncestryChart() {
                   dominantBaseline="central"
                   style={{
                     fontFamily: 'var(--font-body)',
-                    fontSize: containerWidth < 600 ? '0.5rem' : '0.6rem',
+                    fontSize: containerWidth < 600 ? '0.7rem' : '0.75rem',
                     fill: 'var(--text-on-dark-muted)',
                   }}
                 >

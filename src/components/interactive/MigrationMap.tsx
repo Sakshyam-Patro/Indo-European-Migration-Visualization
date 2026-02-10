@@ -730,8 +730,8 @@ export default function MigrationMap() {
           <div
             onClick={() => setLegendOpen(!legendOpen)}
             style={{
-              fontSize: '0.7rem',
-              color: '#666',
+              fontSize: '0.75rem',
+              color: '#555',
               fontFamily: 'var(--font-body)',
               textTransform: 'uppercase',
               letterSpacing: '0.1em',
@@ -745,7 +745,7 @@ export default function MigrationMap() {
               gap: '0.5rem',
             }}>
             <span>Routes</span>
-            <span style={{ fontSize: '0.6rem' }}>
+            <span style={{ fontSize: '0.7rem' }}>
               {legendOpen ? '▼' : '▶'}
             </span>
           </div>
@@ -798,8 +798,8 @@ export default function MigrationMap() {
               {visibleCulturesList.length > 0 && (
                 <>
                   <div style={{
-                    fontSize: '0.7rem',
-                    color: '#666',
+                    fontSize: '0.75rem',
+                    color: '#555',
                     fontFamily: 'var(--font-body)',
                     textTransform: 'uppercase',
                     letterSpacing: '0.1em',
@@ -890,7 +890,7 @@ export default function MigrationMap() {
               </button>
             </div>
             <div style={{
-              fontSize: '0.7rem', color: '#8A7E6A',
+              fontSize: '0.75rem', color: '#706454',
               fontFamily: 'var(--font-body)', marginBottom: '0.5rem',
             }}>
               {dateToLabel(selectedCulture.culture.startDate)} to {dateToLabel(selectedCulture.culture.endDate)}
@@ -907,7 +907,7 @@ export default function MigrationMap() {
             {selectedCulture.culture.geneticProfile && (
               <div>
                 <div style={{
-                  fontSize: '0.6rem', color: '#8A7E6A',
+                  fontSize: '0.7rem', color: '#706454',
                   fontFamily: 'var(--font-body)', textTransform: 'uppercase',
                   letterSpacing: '0.08em', marginBottom: '0.3rem',
                 }}>
@@ -941,7 +941,7 @@ export default function MigrationMap() {
                     }
                     return (
                       <span key={key} title={GENETIC_LABELS[key] || key} style={{
-                        fontSize: '0.55rem', color: '#8A7E6A',
+                        fontSize: '0.7rem', color: '#706454',
                         fontFamily: 'var(--font-body)',
                         display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
                       }}>
@@ -1012,7 +1012,7 @@ export default function MigrationMap() {
               </button>
             </div>
             <div style={{
-              fontSize: '0.7rem', color: '#8A7E6A',
+              fontSize: '0.75rem', color: '#706454',
               fontFamily: 'var(--font-body)', marginBottom: '0.25rem',
             }}>
               {dateToLabel(selectedBranch.migration.startDate)} to {dateToLabel(selectedBranch.migration.endDate)}

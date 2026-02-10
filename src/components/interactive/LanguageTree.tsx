@@ -108,10 +108,9 @@ function MobileTreeNode({ node, depth, branchName }: { node: LanguageNode; depth
         {/* Period badge */}
         {node.period && depth <= 2 && (
           <span style={{
-            fontSize: '0.6rem',
+            fontSize: '0.7rem',
             color: 'var(--text-on-dark-muted)',
             fontFamily: 'var(--font-body)',
-            opacity: 0.7,
           }}>
             {node.period}
           </span>
