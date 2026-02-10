@@ -139,6 +139,8 @@ function NotationGuide() {
 }
 
 export default function DiscoverySection() {
+  const cognateRef = useRef<HTMLDivElement>(null)
+
   return (
     <section
       id="discovery"
@@ -226,15 +228,41 @@ export default function DiscoverySection() {
           <NotationGuide />
         </FadeInSection>
 
+        {/* Teaser prompt: prime the reader to look for patterns */}
+        <FadeInSection delay={0.08}>
+          <div style={{
+            maxWidth: '65ch',
+            margin: '0 auto 2rem',
+            padding: '1.25rem 1.5rem',
+            borderLeft: '3px solid var(--teal)',
+            background: 'rgba(13, 115, 119, 0.04)',
+            borderRadius: '0 8px 8px 0',
+          }}>
+            <p style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(1.05rem, 2vw, 1.25rem)',
+              color: 'var(--text-on-light)',
+              fontStyle: 'italic',
+              lineHeight: 1.6,
+              marginBottom: 0,
+            }}>
+              Take a look at the table below. As you scan across the languages, can you
+              spot any patterns in how the sounds change? Pay attention to the first
+              consonant of each word.
+            </p>
+          </div>
+        </FadeInSection>
+
         {/* Cognate Explorer: dark card on light background */}
         <FadeInSection delay={0.1}>
-          <div style={{
+          <div ref={cognateRef} style={{
             marginBottom: '6rem',
             padding: 'clamp(1.5rem, 3vw, 2.5rem)',
             background: 'var(--bg-surface)',
             borderRadius: 20,
             border: '1px solid rgba(200, 169, 110, 0.1)',
             boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15)',
+            scrollMarginTop: '60px',
           }}>
             <CognateExplorer />
           </div>
@@ -275,6 +303,61 @@ export default function DiscoverySection() {
             boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15)',
           }}>
             <SoundShiftMachine />
+          </div>
+        </FadeInSection>
+
+        {/* "Look again" prompt with scroll-back */}
+        <FadeInSection>
+          <div style={{
+            maxWidth: '65ch',
+            margin: '3rem auto 0',
+            padding: '1.25rem 1.5rem',
+            borderLeft: '3px solid var(--teal)',
+            background: 'rgba(13, 115, 119, 0.04)',
+            borderRadius: '0 8px 8px 0',
+          }}>
+            <p style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'clamp(1.05rem, 2vw, 1.25rem)',
+              color: 'var(--text-on-light)',
+              fontStyle: 'italic',
+              lineHeight: 1.6,
+              marginBottom: '1rem',
+            }}>
+              Now that you've seen how consonants shifted, go back to the cognate
+              table. Notice how Latin <em>pater</em> and English <em>father</em> follow
+              exactly the pattern you just explored: *p → f.
+            </p>
+            <button
+              onClick={() => {
+                cognateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                padding: '0.5rem 1.25rem',
+                background: 'transparent',
+                border: '1px solid var(--teal)',
+                borderRadius: 20,
+                cursor: 'pointer',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.875rem',
+                color: 'var(--teal)',
+                transition: 'background 0.2s, color 0.2s',
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(13, 115, 119, 0.1)'
+                e.currentTarget.style.color = 'var(--teal-light)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.color = 'var(--teal)'
+              }}
+            >
+              <span aria-hidden="true">&uarr;</span>
+              Revisit the Cognate Table
+            </button>
           </div>
         </FadeInSection>
 
