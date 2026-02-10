@@ -12,6 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   reconstructed: '#9B59B6',
   extinct: '#95A5A6',
   living: '#27AE60',
+  revived: '#F39C12',
 }
 
 const BRANCH_COLORS: Record<string, string> = {
@@ -299,15 +300,15 @@ export default function LanguageTree() {
           return d.data.name
         })
 
-      // Pulse ring for living language dots (uses recursive D3 transitions)
-      nodeEnter.filter(d => !d.children && !d._children && d.data.status === 'living')
+      // Pulse ring for living/revived language dots (uses recursive D3 transitions)
+      nodeEnter.filter(d => !d.children && !d._children && (d.data.status === 'living' || d.data.status === 'revived'))
         .append('circle')
         .attr('class', 'status-pulse')
         .attr('cx', 8)
         .attr('cy', -6)
         .attr('r', 3)
         .attr('fill', 'none')
-        .attr('stroke', '#27AE60')
+        .attr('stroke', d => d.data.status === 'revived' ? '#F39C12' : '#27AE60')
         .attr('stroke-width', 1.5)
         .attr('opacity', 0)
         .each(function () {
@@ -326,13 +327,13 @@ export default function LanguageTree() {
         })
 
       // Status dot for leaf nodes
-      nodeEnter.filter(d => !d.children && !d._children && d.data.status === 'living')
+      nodeEnter.filter(d => !d.children && !d._children && (d.data.status === 'living' || d.data.status === 'revived'))
         .append('circle')
         .attr('class', 'status-dot')
         .attr('cx', 8)
         .attr('cy', -6)
         .attr('r', 3)
-        .attr('fill', '#27AE60')
+        .attr('fill', d => d.data.status === 'revived' ? '#F39C12' : '#27AE60')
         .attr('opacity', 0.9)
 
       // Update + enter
@@ -499,7 +500,7 @@ export default function LanguageTree() {
                   width: 10, height: 10, borderRadius: '50%',
                   background: color, display: 'inline-block',
                 }} />
-                {status === 'reconstructed' ? 'Reconstructed' : status === 'extinct' ? 'Extinct' : 'Living'}
+                {status === 'reconstructed' ? 'Reconstructed' : status === 'extinct' ? 'Extinct' : status === 'revived' ? 'Revived' : 'Living'}
               </div>
             ))}
           </div>
