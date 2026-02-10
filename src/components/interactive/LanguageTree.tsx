@@ -52,18 +52,34 @@ export default function LanguageTree() {
   const rootRef = useRef<TreeNode | null>(null)
   const updateFnRef = useRef<((source: TreeNode) => void) | null>(null)
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null)
+  const gRef = useRef<d3.Selection<SVGGElement, unknown, null, undefined> | null>(null)
+  const fitToViewRef = useRef<((paddingX?: number, duration?: number) => void) | null>(null)
+  const dimensionsRef = useRef({ width: 900, height: 600 })
   const [selectedNode, setSelectedNode] = useState<LanguageNode | null>(null)
-  const [dimensions, setDimensions] = useState({ width: 900, height: 600 })
+  // Only used to trigger the initial render; resize effect reads from ref
+  const [, setDimTick] = useState(0)
 
-  // Responsive sizing
+  // Responsive sizing — store in ref, bump tick for initial render only
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
+    let isFirst = true
     const observer = new ResizeObserver(entries => {
       for (const entry of entries) {
         const w = entry.contentRect.width
-        setDimensions({ width: w, height: Math.max(500, Math.min(650, w * 0.6)) })
+        dimensionsRef.current = { width: w, height: Math.max(500, Math.min(800, w * 0.55)) }
+      }
+      if (isFirst) {
+        isFirst = false
+        setDimTick(t => t + 1)
+      } else {
+        // Resize without full rebuild — just update SVG size and re-fit
+        const svg = svgRef.current
+        if (!svg) return
+        const { width, height } = dimensionsRef.current
+        d3.select(svg).attr('width', width).attr('height', height)
+        fitToViewRef.current?.(80, 300)
       }
     })
     observer.observe(container)
@@ -74,13 +90,14 @@ export default function LanguageTree() {
     setSelectedNode(data)
   }, [])
 
+  // D3 init — runs once after first dimension measurement
   useEffect(() => {
     if (!svgRef.current) return
 
-    const { width, height } = dimensions
+    const { width, height } = dimensionsRef.current
     const margin = { top: 20, right: 20, bottom: 20, left: 20 }
 
-    // Clear previous
+    // Clear previous (only on true init)
     d3.select(svgRef.current).selectAll('*').remove()
 
     const svg = d3.select(svgRef.current)
@@ -89,6 +106,7 @@ export default function LanguageTree() {
 
     // Main group that zoom/pan will transform
     const g = svg.append('g')
+    gRef.current = g
 
     // Create hierarchy
     const root = d3.hierarchy<LanguageNode>(languageTree) as TreeNode
@@ -110,12 +128,11 @@ export default function LanguageTree() {
     root.x0 = 0
     root.y0 = 0
 
-    // Zoom behavior
+    // Zoom behavior — allow Ctrl/Cmd+wheel for zoom, block plain wheel
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.15, 3])
       .filter((event) => {
-        // Block wheel scroll to avoid hijacking page scroll
-        if (event.type === 'wheel') return false
+        if (event.type === 'wheel') return event.ctrlKey || event.metaKey
         return true
       })
       .on('zoom', (event) => {
@@ -131,19 +148,19 @@ export default function LanguageTree() {
     })
 
     function fitToView(paddingX = 60, duration = 600) {
-      // Get bounding box of all content
       const gNode = g.node()
       if (!gNode) return
       const bbox = gNode.getBBox()
       if (bbox.width === 0 || bbox.height === 0) return
 
-      const fullWidth = width - margin.left - margin.right
-      const fullHeight = height - margin.top - margin.bottom
+      const { width: w, height: h } = dimensionsRef.current
+      const fullWidth = w - margin.left - margin.right
+      const fullHeight = h - margin.top - margin.bottom
 
       const scale = Math.min(
         fullWidth / (bbox.width + paddingX * 2),
         fullHeight / (bbox.height + 40),
-        1.2 // cap max scale so collapsed state doesn't look weird
+        1.2
       )
 
       const tx = margin.left + (fullWidth - bbox.width * scale) / 2 - bbox.x * scale
@@ -157,6 +174,8 @@ export default function LanguageTree() {
         svg.call(zoom.transform, transform)
       }
     }
+
+    fitToViewRef.current = fitToView
 
     function update(source: TreeNode) {
       const duration = 600
@@ -401,7 +420,8 @@ export default function LanguageTree() {
 
     // Initial render
     update(root)
-  }, [dimensions, handleNodeSelect])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handleNodeSelect])
 
   // Expand All / Collapse All
   const expandAll = useCallback(() => {

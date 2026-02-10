@@ -36,8 +36,8 @@ export default function FamilyTreeSection() {
         background: 'linear-gradient(to right, transparent, var(--bronze), transparent)',
       }} />
 
+      {/* Section heading — keep readable width */}
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 2rem' }}>
-        {/* Section heading */}
         <FadeIn>
           <div style={{ maxWidth: '65ch', margin: '0 auto 4rem' }}>
             <span style={{
@@ -83,8 +83,10 @@ export default function FamilyTreeSection() {
             </p>
           </div>
         </FadeIn>
+      </div>
 
-        {/* Language Tree: dark card on light background */}
+      {/* Language Tree — wider container for big screens */}
+      <div style={{ maxWidth: 1800, margin: '0 auto', padding: '0 2rem' }}>
         <FadeIn delay={0.1}>
           <div style={{
             padding: 'clamp(1.5rem, 3vw, 2.5rem)',
