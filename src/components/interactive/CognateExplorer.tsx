@@ -100,6 +100,19 @@ export default function CognateExplorer() {
           .cognate-grid-scroll > * {
             min-width: 700px;
           }
+          .cognate-vertical-scroll {
+            max-height: 60vh;
+          }
+        }
+        .cognate-vertical-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .cognate-vertical-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .cognate-vertical-scroll::-webkit-scrollbar-thumb {
+          background: rgba(139, 115, 85, 0.3);
+          border-radius: 3px;
         }
       `}</style>
 
@@ -130,13 +143,22 @@ export default function CognateExplorer() {
 
       {/* Scrollable grid wrapper for mobile */}
       <div className="cognate-grid-scroll">
+      <div className="cognate-vertical-scroll" style={{
+        maxHeight: '70vh',
+        overflowY: 'auto',
+      }}>
 
       {/* Language header row */}
       <div style={{
         display: 'grid',
         gridTemplateColumns: '100px repeat(8, 1fr)',
-        gap: '2px',
+        gap: 0,
         marginBottom: '2px',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        background: 'var(--bg-surface)',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
       }}>
         <div style={{
           padding: '0.6rem 0.5rem',
@@ -255,6 +277,7 @@ export default function CognateExplorer() {
         })}
       </div>
 
+      </div>{/* end cognate-vertical-scroll */}
       </div>{/* end cognate-grid-scroll */}
 
       {/* Selected cognate detail panel */}
