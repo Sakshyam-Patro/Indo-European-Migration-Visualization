@@ -409,52 +409,6 @@ export default function ExplorerSection() {
               </span>
             </div>
 
-            {/* Support */}
-            <div style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '0.5rem',
-              marginTop: '0.5rem',
-            }}>
-              <a
-                href="https://buymeacoffee.com/sakshyampatro"
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.5rem',
-                  padding: '0.6rem 1.2rem',
-                  background: 'rgba(184, 134, 11, 0.15)',
-                  border: '1px solid rgba(212, 165, 55, 0.3)',
-                  borderRadius: 8,
-                  color: 'var(--ochre-light)',
-                  fontSize: '0.85rem',
-                  fontFamily: 'var(--font-body)',
-                  textDecoration: 'none',
-                  transition: 'all 0.2s ease',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'rgba(184, 134, 11, 0.25)'
-                  e.currentTarget.style.borderColor = 'rgba(212, 165, 55, 0.5)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(184, 134, 11, 0.15)'
-                  e.currentTarget.style.borderColor = 'rgba(212, 165, 55, 0.3)'
-                }}
-              >
-                ☕ Buy Me a Coffee
-              </a>
-              <span style={{
-                color: 'var(--text-on-dark-muted)',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-body)',
-              }}>
-                If you enjoyed this, consider supporting the project
-              </span>
-            </div>
-
             <div style={{
               display: 'flex',
               flexWrap: 'wrap',
