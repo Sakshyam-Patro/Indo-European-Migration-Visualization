@@ -484,7 +484,7 @@ export default function LanguageTree() {
           </p>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', flexDirection: 'row', flexWrap: 'wrap', gap: '0.75rem', alignItems: 'center' }}>
           {/* Legend */}
           <div style={{
             display: 'flex',
