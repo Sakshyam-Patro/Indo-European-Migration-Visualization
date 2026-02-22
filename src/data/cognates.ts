@@ -129,7 +129,7 @@ export const cognates: CognateEntry[] = [
       Russian: "koleso (from *kʷel- 'to turn', not direct *kʷékʷlos cognate)",
       Irish: "(not attested from this root)",
       Persian: "čarx (borrowed from or influenced by Sanskrit cakra-)",
-      Lithuanian: "(not attested as direct cognate; compare kelias 'road' from *kʷel-)",
+      Lithuanian: "kaklas (neck; from *kʷokʷlo-s, the same reduplicated *kʷel- root — 'the one that turns'; Finnish kaula 'neck' was borrowed from this Baltic form)",
     },
     soundNotes:
       "PIE reduplicated *kʷe-kʷl-o-. Sanskrit shows dissimilation of the two labiovelars: *kʷ...kʷ > c...k (cakra-). Greek preserves both as plain velars k...k (kúklos). English wheel reflects *kʷ > hw (Grimm's Law).",
@@ -174,7 +174,7 @@ export const cognates: CognateEntry[] = [
       Latin: "lāna (with loss of initial *w-)",
       Greek: "lênos (λῆνος, with loss of initial *w- as in Latin)",
       Sanskrit: "ū́rṇā (with *l > r, characteristic Sanskrit rhotacism)",
-      Russian: "volna (вóлна)",
+      Russian: "vo\u0301lna (во́лна, dialectal/archaic; standard modern Russian uses шерсть; the cognate survives as the primary word in Ukrainian вовна, Bulgarian вълна, Polish wełna)",
       Irish: "olann",
       Persian: "(not attested as a direct cognate)",
       Lithuanian: "vìlna",
@@ -353,7 +353,7 @@ export const cognates: CognateEntry[] = [
       Russian: "derevo (дерево, tree)",
       Irish: "dair (oak; modern Irish doire 'grove')",
       Persian: "deraxt (درخت, tree)",
-      Lithuanian: "(not attested from this root directly)",
+      Lithuanian: "drevė̃ (tree hollow; direct cognate via Proto-Baltic *drew-iā̃; also related: derva 'tar, resin')",
     },
     soundNotes:
       "PIE *d > Germanic t (Grimm's Law), yielding English tree. Greek preserves both dóru (wood/spear) and drûs (oak/tree). The semantic range covers 'wood, tree, oak, spear (as wooden weapon)'. Russian derevo and Persian deraxt both show the original *d- preserved.",
@@ -673,10 +673,10 @@ export const cognates: CognateEntry[] = [
       Russian: "sol' (соль)",
       Irish: "salann (salt)",
       Persian: "(not attested from this root; uses namak from different root)",
-      Lithuanian: "druska (from different root; but compare saldus 'sweet')",
+      Lithuanian: "sólymas (brine; the actual PIE *sal- cognate — everyday 'druska' comes from *dʰrews- 'to crumble', an entirely unrelated root)",
     },
     soundNotes:
-      "Preserved clearly in the western branches: English salt, Latin sal, Greek háls, Russian sol', Irish salann. Greek lost initial *s- (háls < *seh₂ls). The word reflects PIE knowledge of salt as a valuable trade commodity. English 'salary' (payment in salt) comes from Latin sal via salarium.",
+      "Preserved clearly in the western branches: English salt, Latin sal, Greek háls, Russian sol', Irish salann. Greek lost initial *s- (háls < *seh₂ls). The word reflects PIE knowledge of salt as a valuable trade commodity. English 'salary' (payment in salt) comes from Latin sal via salarium. Lithuanian is notable for having replaced the PIE salt word with druska (from *dʰrews- 'to crumble/break into pieces', reflecting salt's granular texture), preserving the true cognate only in sólymas ('brine').",
   },
   {
     pieRoot: "*h₂eḱ-",
@@ -849,7 +849,7 @@ export const cognates: CognateEntry[] = [
       Russian: "brat' (брать, to take)",
       Irish: "beirim (I carry)",
       Persian: "bordan (بردن, to carry, take)",
-      Lithuanian: "(not attested directly from this root)",
+      Lithuanian: "ber̃ti (to strew, scatter; from PIE *bʰer- via PBS *bértei; semantic shift from 'carry' to 'pour/scatter'; Latvian bērt is parallel)",
     },
     soundNotes:
       "PIE *bʰ > Germanic b (bear), > Latin f (ferre), > Greek ph (phérō). Sanskrit bhárati preserves the root transparently. This root gives English 'bear' (carry), 'birth', 'burden', as well as Latin-derived 'transfer', 'conference', 'fertile', 'differ', 'offer', 'prefer', 'refer', and 'suffer'.",
@@ -961,7 +961,7 @@ export const cognates: CognateEntry[] = [
       Russian: "videt' (видеть, to see)",
       Irish: "fis (knowledge, from *wid-tu-)",
       Persian: "didan (دیدن, to see; from *wi-did-)",
-      Lithuanian: "(not attested from this root directly)",
+      Lithuanian: "veizėti (to look, observe; dialectal variant of veizdėti; also veidas 'face' — 'that which is seen'; all from PIE *weid-)",
     },
     soundNotes:
       "The semantic connection between 'see' and 'know' runs through all branches: Latin videre 'see' > English 'video', 'evidence'; Greek oida 'I know' (literally 'I have seen') > 'idea'; Sanskrit véda 'knowledge' > the Vedas. English wit, wise, wisdom all come from the 'know' sense. This single root has given English over 50 words.",
@@ -1057,7 +1057,7 @@ export const cognates: CognateEntry[] = [
       Russian: "dom (дом, house)",
       Irish: "damnae (material, timber; from *dem-)",
       Persian: "(not attested directly; compare dam 'trap' from related sense)",
-      Lithuanian: "(not attested from this root directly)",
+      Lithuanian: "namas (house; from PBS *damús < PIE *dómos; d→n is regular Baltic nasal assimilation before -m-)",
     },
     soundNotes:
       "Latin domus, Greek dómos, Sanskrit dama, and Russian dom are nearly identical. English timber (building material) comes from the same root via a semantic shift from 'house' to 'what you build a house from'. Greek despótēs 'master' (> English 'despot') literally means 'house-master' (dems-pot-).",
