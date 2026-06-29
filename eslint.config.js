@@ -20,4 +20,13 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    // shadcn/ui primitives intentionally co-export their `*Variants` (cva)
+    // helpers alongside the component, which is incompatible with the
+    // react-refresh single-export rule. Relax it for the ui/ directory only.
+    files: ['src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
 ])

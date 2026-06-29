@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { Badge } from './badge';
+import { cn } from '../../lib/utils';
 
 interface InteractiveLabelProps {
   className?: string;
@@ -7,42 +9,23 @@ interface InteractiveLabelProps {
 }
 
 /**
- * Canonical "Interactive" pill badge shown above every interactive
- * visualization. Keep this the single source of truth — do not hand-roll
- * copies in individual components.
+ * "Interactive" eyebrow shown above every interactive visualization.
+ * Built on the standard Badge primitive (ui/badge.tsx) so the shape and
+ * styling stay consistent everywhere — do not hand-roll badge markup.
  */
 export function InteractiveLabel({ className, style }: InteractiveLabelProps) {
   return (
-    <div
-      className={className}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.3rem 0.8rem',
-        background: 'rgba(13, 115, 119, 0.15)',
-        border: '1px solid rgba(13, 115, 119, 0.3)',
-        borderRadius: 20,
-        marginBottom: '1rem',
-        fontSize: '0.75rem',
-        color: 'var(--teal-light)',
-        fontFamily: 'var(--font-body)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
-        ...style,
-      }}
+    <Badge
+      variant="interactive"
+      style={style}
+      className={cn('mb-4 uppercase tracking-[0.1em] font-semibold', className)}
     >
       <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: 'var(--teal-light)',
-          display: 'inline-block',
-        }}
+        className="size-1.5 rounded-full bg-current"
+        aria-hidden="true"
       />
       Interactive
-    </div>
+    </Badge>
   );
 }
 
