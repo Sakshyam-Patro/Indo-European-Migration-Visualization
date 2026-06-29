@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cognates, type CognateEntry } from '../../data/cognates'
+import InteractiveLabel from '../ui/InteractiveLabel'
 
 /** Extract the primary word form, stripping parenthetical annotations */
 function shortForm(form: string): string {
@@ -50,29 +51,7 @@ export default function CognateExplorer() {
     <div style={{ width: '100%' }}>
       {/* Section intro */}
       <div style={{ marginBottom: '2rem' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.3rem 0.8rem',
-          background: 'rgba(13, 115, 119, 0.15)',
-          border: '1px solid rgba(13, 115, 119, 0.3)',
-          borderRadius: 20,
-          marginBottom: '1rem',
-          fontSize: '0.75rem',
-          color: 'var(--teal-light)',
-          fontFamily: 'var(--font-body)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-        }}>
-          <span style={{
-            width: 6, height: 6,
-            borderRadius: '50%',
-            background: 'var(--teal-light)',
-            display: 'inline-block',
-          }} />
-          Interactive
-        </div>
+        <InteractiveLabel />
         <h3 style={{
           fontFamily: 'var(--font-display)',
           fontSize: 'clamp(1.5rem, 3vw, 2rem)',

@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mythConnections, mythCategories, type MythConnection } from '../../data/myths'
+import InteractiveLabel from '../ui/InteractiveLabel'
 
 const CATEGORY_KEYS = Object.keys(mythCategories) as MythConnection['category'][]
 
@@ -25,29 +26,7 @@ export default function MythWeb() {
     <div style={{ width: '100%' }}>
       {/* Section intro */}
       <div style={{ marginBottom: '2rem' }}>
-        <div style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          padding: '0.3rem 0.8rem',
-          background: 'rgba(155, 89, 182, 0.15)',
-          border: '1px solid rgba(155, 89, 182, 0.3)',
-          borderRadius: 20,
-          marginBottom: '1rem',
-          fontSize: '0.75rem',
-          color: '#C39BD3',
-          fontFamily: 'var(--font-body)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-        }}>
-          <span style={{
-            width: 6, height: 6,
-            borderRadius: '50%',
-            background: '#C39BD3',
-            display: 'inline-block',
-          }} />
-          Interactive
-        </div>
+        <InteractiveLabel />
         <h3 style={{
           fontFamily: 'var(--font-display)',
           fontSize: 'clamp(1.5rem, 3vw, 2rem)',

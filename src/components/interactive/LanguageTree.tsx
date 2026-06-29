@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import * as d3 from 'd3'
 import { languageTree, type LanguageNode } from '../../data/languageTree'
+import InteractiveLabel from '../ui/InteractiveLabel'
 
 interface TreeNode extends d3.HierarchyPointNode<LanguageNode> {
   _children?: TreeNode[]
@@ -135,24 +136,7 @@ function MobileTreeNode({ node, depth, branchName }: { node: LanguageNode; depth
 function MobileLanguageTree() {
   return (
     <div style={{ width: '100%' }}>
-      <div style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.3rem 0.8rem',
-        background: 'rgba(13, 115, 119, 0.15)',
-        border: '1px solid rgba(13, 115, 119, 0.3)',
-        borderRadius: 20,
-        marginBottom: '0.75rem',
-        fontSize: '0.75rem',
-        color: 'var(--teal-light)',
-        fontFamily: 'var(--font-body)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
-      }}>
-        <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--teal-light)', display: 'inline-block' }} />
-        Interactive
-      </div>
+      <InteractiveLabel style={{ marginBottom: '0.75rem' }} />
       <h3 style={{
         fontFamily: 'var(--font-display)',
         fontSize: '1.4rem',
@@ -576,7 +560,6 @@ export default function LanguageTree() {
 
     // Initial render
     update(root)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleNodeSelect])
 
   // Expand All / Collapse All
@@ -624,29 +607,7 @@ export default function LanguageTree() {
         gap: '1rem',
       }}>
         <div>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.3rem 0.8rem',
-            background: 'rgba(13, 115, 119, 0.15)',
-            border: '1px solid rgba(13, 115, 119, 0.3)',
-            borderRadius: 20,
-            marginBottom: '0.75rem',
-            fontSize: '0.75rem',
-            color: 'var(--teal-light)',
-            fontFamily: 'var(--font-body)',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-          }}>
-            <span style={{
-              width: 6, height: 6,
-              borderRadius: '50%',
-              background: 'var(--teal-light)',
-              display: 'inline-block',
-            }} />
-            Interactive
-          </div>
+          <InteractiveLabel style={{ marginBottom: '0.75rem' }} />
           <h3 style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'clamp(1.5rem, 3vw, 2rem)',
