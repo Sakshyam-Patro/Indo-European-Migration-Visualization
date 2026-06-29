@@ -26,8 +26,8 @@ export function useScrollProgress(): number {
       rafId = requestAnimationFrame(handleScroll);
     };
 
-    // Set initial value
-    handleScroll();
+    // Set initial value (deferred to avoid a synchronous setState in the effect body)
+    rafId = requestAnimationFrame(handleScroll);
 
     window.addEventListener('scroll', onScroll, { passive: true });
 
