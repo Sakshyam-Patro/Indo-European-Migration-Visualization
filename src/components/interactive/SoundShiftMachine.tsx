@@ -1,400 +1,543 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { grimmsLaw, type SoundShift } from '../../data/soundChanges'
-import InteractiveLabel from '../ui/InteractiveLabel'
+import VizHeading from '../ui/VizHeading'
+import PIEForm from '../ui/PIEForm'
+import useReducedMotion from '../../hooks/useReducedMotion'
+import { brand, surface, vizPalette, withAlpha } from '../../theme'
 
-const SHIFT_TYPE_COLORS: Record<string, string> = {
-  'Voiceless stops → Fricatives': '#D4A537',
-  'Voiced stops → Voiceless stops': '#14919B',
-  'Voiced aspirates → Voiced stops': '#B8724D',
+/** The articulatory classes named in the group labels and the glossary. */
+type PhoneticTerm = 'Voiceless stops' | 'Fricatives' | 'Voiced stops' | 'Voiced aspirates'
+
+const PHONETIC_GLOSSARY: Record<PhoneticTerm, string> = {
+  'Voiceless stops':
+    'Consonants made by fully blocking airflow with no vocal cord vibration, such as p, t and k.',
+  Fricatives:
+    'Consonants made by forcing air through a narrow gap so it hisses, such as f, th and h.',
+  'Voiced stops':
+    'Consonants made by fully blocking airflow while the vocal cords vibrate, such as b, d and g.',
+  'Voiced aspirates':
+    'Consonants with vocal cord vibration plus an audible puff of breath, such as Sanskrit bh, dh and gh.',
 }
 
-const PHONETIC_GLOSSARY: Record<string, string> = {
-  'Voiceless stops': 'Consonants made by fully blocking airflow with no vocal cord vibration (like p, t, k)',
-  'Fricatives': 'Consonants made by forcing air through a narrow gap, creating friction (like f, th, h)',
-  'Voiced stops': 'Consonants made by fully blocking airflow WITH vocal cord vibration (like b, d, g)',
-  'Voiced aspirates': 'Consonants with vocal cord vibration plus a puff of breath (like bh, dh, gh in Sanskrit)',
+type ShiftGroupId = 'voiceless-to-fricatives' | 'voiced-to-voiceless' | 'aspirates-to-voiced'
+
+interface ShiftGroup {
+  id: ShiftGroupId
+  /** Class the PIE sounds belonged to. Stored as a field, never parsed back out of a label. */
+  from: PhoneticTerm
+  /** Class their Germanic reflexes belong to. */
+  to: PhoneticTerm
+  description: string
+  /**
+   * `pieLetter` values from `grimmsLaw`. These are stable identifiers, so
+   * reordering or inserting rows in the data file cannot reshuffle the groups.
+   */
+  pieLetters: string[]
 }
 
-const SHIFT_GROUPS = [
+const SHIFT_GROUPS: ShiftGroup[] = [
   {
-    label: 'Voiceless stops → Fricatives',
-    description: 'PIE voiceless stops became fricatives in Germanic',
-    indices: [0, 1, 2], // p→f, t→þ, k→h
+    id: 'voiceless-to-fricatives',
+    from: 'Voiceless stops',
+    to: 'Fricatives',
+    description: 'PIE voiceless stops became fricatives in Germanic.',
+    pieLetters: ['*p', '*t', '*k / *ḱ'],
   },
   {
-    label: 'Voiced stops → Voiceless stops',
-    description: 'PIE voiced stops lost their voicing in Germanic',
-    indices: [3, 4, 5], // d→t, b→p, g→k
+    id: 'voiced-to-voiceless',
+    from: 'Voiced stops',
+    to: 'Voiceless stops',
+    description: 'PIE voiced stops lost their voicing in Germanic.',
+    pieLetters: ['*d', '*b', '*g / *ǵ'],
   },
   {
-    label: 'Voiced aspirates → Voiced stops',
-    description: 'PIE breathy voiced stops lost their aspiration in Germanic',
-    indices: [6, 7, 8], // bʰ→b, dʰ→d, gʰ→g
+    id: 'aspirates-to-voiced',
+    from: 'Voiced aspirates',
+    to: 'Voiced stops',
+    description: 'PIE breathy voiced stops lost their aspiration in Germanic.',
+    pieLetters: ['*bʰ', '*dʰ', '*gʰ / *ǵʰ'],
   },
 ]
 
+/**
+ * Keyed by group id rather than by position, so adding or reordering a group
+ * cannot silently hand it another group's hue. A missing key is a build error.
+ */
+const GROUP_COLORS: Record<ShiftGroupId, string> = {
+  'voiceless-to-fricatives': vizPalette[0],
+  'voiced-to-voiceless': vizPalette[1],
+  'aspirates-to-voiced': vizPalette[2],
+}
+
+/** How long the machine ignores further clicks while the example animates in. */
+const ANIMATION_LOCK_MS = 800
+
+/** Accessible name for a group — the arrow glyph does not read aloud usefully. */
+function groupLabel(group: ShiftGroup): string {
+  return `${group.from} become ${group.to}`
+}
+
+/**
+ * Resolves a group's rows by `pieLetter`. A letter that no longer exists in
+ * `soundChanges.ts` is dropped rather than rendered as a blank card.
+ */
+function shiftsForGroup(group: ShiftGroup): SoundShift[] {
+  return group.pieLetters
+    .map(letter => grimmsLaw.find(entry => entry.pieLetter === letter))
+    .filter((entry): entry is SoundShift => entry !== undefined)
+}
+
+/**
+ * The Germanic reflex is the one Grimm's Law actually produced. Selected by
+ * `changeType`, not by array position — the other branches in a row are
+ * retentions, centum mergers or satem palatalisations.
+ */
+function germanicReflex(shift: SoundShift) {
+  return shift.shifts.find(entry => entry.changeType === "Grimm's Law")
+}
+
 export default function SoundShiftMachine() {
-  const [selectedShift, setSelectedShift] = useState<SoundShift | null>(null)
+  const reduced = useReducedMotion()
   const [activeGroup, setActiveGroup] = useState(0)
+  const [selectedShift, setSelectedShift] = useState<SoundShift | null>(null)
   const [isAnimating, setIsAnimating] = useState(false)
+  const lockTimer = useRef<number | null>(null)
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  useEffect(
+    () => () => {
+      if (lockTimer.current !== null) window.clearTimeout(lockTimer.current)
+    },
+    [],
+  )
+
+  const group = SHIFT_GROUPS[activeGroup]
+  const color = GROUP_COLORS[group.id]
+  const rows = shiftsForGroup(group)
+  const selectedReflex = selectedShift ? germanicReflex(selectedShift) : undefined
+  const otherBranches = selectedShift
+    ? selectedShift.shifts.filter(entry => entry.changeType !== "Grimm's Law" && entry.example)
+    : []
+
+  const selectGroup = (index: number) => {
+    setActiveGroup(index)
+    setSelectedShift(null)
+  }
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const last = SHIFT_GROUPS.length - 1
+    let next: number | null = null
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+      next = activeGroup === last ? 0 : activeGroup + 1
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+      next = activeGroup === 0 ? last : activeGroup - 1
+    } else if (event.key === 'Home') {
+      next = 0
+    } else if (event.key === 'End') {
+      next = last
+    }
+    if (next === null) return
+    event.preventDefault()
+    selectGroup(next)
+    tabRefs.current[next]?.focus()
+  }
 
   const handleShiftClick = (shift: SoundShift) => {
+    if (reduced) {
+      setSelectedShift(shift)
+      return
+    }
     if (isAnimating) return
     setIsAnimating(true)
     setSelectedShift(shift)
-    setTimeout(() => setIsAnimating(false), 800)
+    if (lockTimer.current !== null) window.clearTimeout(lockTimer.current)
+    lockTimer.current = window.setTimeout(() => {
+      lockTimer.current = null
+      setIsAnimating(false)
+    }, ANIMATION_LOCK_MS)
   }
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '2rem' }}>
-        <InteractiveLabel />
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(1.5rem, 3vw, 2rem)',
-          color: 'var(--text-bright)',
-          marginBottom: '0.75rem',
-        }}>
-          Grimm's Law Machine
-        </h3>
-        <p style={{
-          color: 'var(--text-on-dark-secondary)',
-          fontSize: '1rem',
-        }}>
-          In 1822, Jacob Grimm (yes, of fairy tale fame) discovered that consonants shifted systematically from Proto-Indo-European to Germanic languages. Click any shift below to see it in action.
-        </p>
-      </div>
+      <VizHeading title="Grimm's Law Machine">
+        Grimm's Law is a chain of three linked consonant shifts that separated Germanic from every
+        other Indo-European branch. Choose a group of sounds, then pick a shift to see a worked
+        example alongside the same root in branches that did not undergo it.
+      </VizHeading>
 
-      {/* Group tabs */}
-      <div style={{
-        display: 'flex',
-        gap: '0.5rem',
-        marginBottom: '2rem',
-        flexWrap: 'wrap',
-      }}>
-        {SHIFT_GROUPS.map((group, i) => (
-          <button
-            key={group.label}
-            onClick={() => setActiveGroup(i)}
-            aria-label={`Show ${group.label} sound shifts`}
-            title={group.label.split(' → ').map(term => `${term}: ${PHONETIC_GLOSSARY[term] || ''}`).join('\n')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: 8,
-              border: `1px solid ${activeGroup === i
-                ? Object.values(SHIFT_TYPE_COLORS)[i] + '66'
-                : 'rgba(139, 115, 85, 0.25)'}`,
-              background: activeGroup === i
-                ? Object.values(SHIFT_TYPE_COLORS)[i] + '15'
-                : 'transparent',
-              color: activeGroup === i
-                ? Object.values(SHIFT_TYPE_COLORS)[i]
-                : 'var(--text-on-dark-muted)',
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.8rem',
-              cursor: 'pointer',
-              transition: 'all 0.2s',
-            }}
-          >
-            {group.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Description */}
-      <p style={{
-        color: 'var(--text-on-dark-muted)',
-        fontSize: '0.85rem',
-        marginBottom: '0.75rem',
-        fontStyle: 'italic',
-      }}>
-        {SHIFT_GROUPS[activeGroup].description}
-      </p>
-
-      {/* Inline phonetic glossary */}
-      <div style={{
-        display: 'flex',
-        gap: '1rem',
-        marginBottom: '1.5rem',
-        flexWrap: 'wrap',
-      }}>
-        {SHIFT_GROUPS[activeGroup].label.split(' → ').map(term => (
-          PHONETIC_GLOSSARY[term] ? (
-            <div key={term} style={{
-              fontSize: '0.8rem',
-              color: 'var(--text-on-dark-muted)',
-              fontFamily: 'var(--font-body)',
-              lineHeight: 1.4,
-              flex: '1 1 200px',
-            }}>
-              <span style={{ fontWeight: 600, color: Object.values(SHIFT_TYPE_COLORS)[activeGroup] }}>{term}:</span>{' '}
-              {PHONETIC_GLOSSARY[term]}
-            </div>
-          ) : null
-        ))}
-      </div>
-
-      {/* Shift buttons grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-        gap: '0.75rem',
-        marginBottom: '2rem',
-      }}>
-        {SHIFT_GROUPS[activeGroup].indices.map(idx => {
-          const shift = grimmsLaw[idx]
-          if (!shift) return null
-          const isActive = selectedShift?.pieLetter === shift.pieLetter
-          const color = Object.values(SHIFT_TYPE_COLORS)[activeGroup]
-
+      <div
+        role="tablist"
+        aria-label="Grimm's Law consonant groups"
+        style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}
+      >
+        {SHIFT_GROUPS.map((item, i) => {
+          const isActive = activeGroup === i
+          const tabColor = GROUP_COLORS[item.id]
           return (
-            <motion.button
-              key={shift.pieLetter}
-              onClick={() => handleShiftClick(shift)}
-              aria-label={`Sound shift: ${shift.pieLetter} to ${shift.shifts[0]?.result} - ${shift.description}`}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
+              key={item.id}
+              ref={el => {
+                tabRefs.current[i] = el
+              }}
+              id={`shift-tab-${item.id}`}
+              role="tab"
+              type="button"
+              aria-label={groupLabel(item)}
+              aria-selected={isActive}
+              // Only one panel is in the DOM at a time, so an inactive tab must
+              // not point aria-controls at an id that does not exist.
+              aria-controls={isActive ? `shift-panel-${item.id}` : undefined}
+              tabIndex={isActive ? 0 : -1}
+              onClick={() => selectGroup(i)}
+              onKeyDown={handleTabKeyDown}
               style={{
-                padding: '1.25rem',
-                borderRadius: 12,
-                border: `1px solid ${isActive ? color + '55' : 'rgba(139, 115, 85, 0.15)'}`,
-                background: isActive
-                  ? color + '12'
-                  : 'rgba(20, 24, 32, 0.5)',
+                padding: '0.6rem 1rem',
+                minHeight: 36,
+                borderRadius: 8,
+                border: `1px solid ${isActive ? withAlpha(tabColor, 0.4) : withAlpha(brand.bronze, 0.25)}`,
+                background: isActive ? withAlpha(tabColor, 0.1) : 'transparent',
+                color: isActive ? tabColor : 'var(--text-on-dark-muted)',
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.8rem',
+                fontWeight: isActive ? 600 : 400,
                 cursor: 'pointer',
-                textAlign: 'center',
-                transition: 'border 0.2s, background 0.2s',
+                transition: 'color 0.2s, background 0.2s, border-color 0.2s',
               }}
             >
-              {/* The shift display */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.75rem',
-                marginBottom: '0.5rem',
-              }}>
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '1.8rem',
-                  color: 'var(--text-on-dark-secondary)',
-                  fontStyle: 'italic',
-                }}>
-                  <span style={{ color: 'var(--teal)', fontSize: '0.7em' }}>*</span>
-                  {shift.pieLetter}
-                </span>
-                <motion.span
-                  animate={isActive ? { x: [0, 5, 0] } : {}}
-                  transition={{ duration: 0.4 }}
-                  style={{
-                    color: color,
-                    fontSize: '1.2rem',
-                  }}
-                >
-                  →
-                </motion.span>
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '1.8rem',
-                  color: color,
-                  fontWeight: 500,
-                }}>
-                  {shift.shifts[0]?.result}
-                </span>
-              </div>
-              <div style={{
-                fontSize: '0.75rem',
-                color: 'var(--text-on-dark-muted)',
-                fontFamily: 'var(--font-body)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}>
-                {shift.description}
-              </div>
-            </motion.button>
+              {item.from} <span aria-hidden="true">→</span> {item.to}
+            </button>
           )
         })}
       </div>
 
-      {/* Animated example */}
-      <AnimatePresence mode="wait">
-        {selectedShift && selectedShift.shifts[0]?.example && (
-          <motion.div
-            key={selectedShift.pieLetter}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.4 }}
-            style={{
-              padding: '2rem',
-              background: 'rgba(20, 24, 32, 0.6)',
-              borderRadius: 16,
-              border: '1px solid rgba(200, 169, 110, 0.12)',
-            }}
-          >
-            <div style={{
-              fontSize: '0.75rem',
-              color: 'var(--text-on-dark-muted)',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              marginBottom: '1.5rem',
-            }}>
-              Example: "{selectedShift.shifts[0].example.meaning}"
+      <div
+        role="tabpanel"
+        id={`shift-panel-${group.id}`}
+        aria-labelledby={`shift-tab-${group.id}`}
+        tabIndex={-1}
+      >
+        <p
+          style={{
+            color: 'var(--text-on-dark-secondary)',
+            fontSize: '0.9rem',
+            fontFamily: 'var(--font-body)',
+            marginBottom: '1rem',
+          }}
+        >
+          {group.description}
+        </p>
+
+        <dl
+          style={{
+            display: 'flex',
+            gap: '1rem',
+            margin: '0 0 1.5rem',
+            flexWrap: 'wrap',
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.8rem',
+            lineHeight: 1.5,
+          }}
+        >
+          {[group.from, group.to].map(term => (
+            <div key={term} style={{ flex: '1 1 220px' }}>
+              <dt style={{ fontWeight: 600, color, display: 'inline' }}>{term}: </dt>
+              <dd style={{ display: 'inline', margin: 0, color: 'var(--text-on-dark-muted)' }}>
+                {PHONETIC_GLOSSARY[term]}
+              </dd>
             </div>
+          ))}
+        </dl>
 
-            {/* The transformation pipeline */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '1.5rem',
-              flexWrap: 'wrap',
-            }}>
-              {/* PIE form */}
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.1 }}
-                style={{ textAlign: 'center' }}
-              >
-                <div style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
-                  fontStyle: 'italic',
-                  color: 'var(--text-on-dark-secondary)',
-                }}>
-                  <span style={{ color: 'var(--teal-light)' }}>*</span>
-                  {selectedShift.shifts[0].example.pie}
-                </div>
-                <div style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-on-dark-muted)',
-                  marginTop: '0.3rem',
-                  fontFamily: 'var(--font-body)',
-                }}>
-                  Proto-Indo-European
-                </div>
-              </motion.div>
-
-              {/* Arrow / gear animation */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.5 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gap: '0.75rem',
+            marginBottom: '2rem',
+          }}
+        >
+          {rows.map(shift => {
+            const reflex = germanicReflex(shift)
+            const isActive = selectedShift?.pieLetter === shift.pieLetter
+            return (
+              <motion.button
+                key={shift.pieLetter}
+                type="button"
+                onClick={() => handleShiftClick(shift)}
+                aria-pressed={isActive}
+                aria-label={`${shift.pieLetter} becomes ${reflex?.result ?? 'its Germanic reflex'} in Germanic. ${shift.description}.`}
+                whileHover={reduced ? undefined : { scale: 1.02 }}
+                whileTap={reduced ? undefined : { scale: 0.98 }}
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: '0.25rem',
+                  padding: '1.25rem',
+                  borderRadius: 12,
+                  border: `1px solid ${isActive ? withAlpha(color, 0.55) : withAlpha(brand.bronze, 0.2)}`,
+                  background: isActive ? withAlpha(color, 0.1) : withAlpha(brand.bgDeep, 0.5),
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  transition: 'border-color 0.2s, background 0.2s',
                 }}
               >
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                <div
+                  aria-hidden="true"
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: '50%',
-                    border: '2px solid var(--bronze)',
-                    borderTopColor: 'var(--ochre)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
+                    gap: '0.75rem',
+                    marginBottom: '0.5rem',
                   }}
                 >
-                  <div style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '50%',
-                    background: 'var(--ochre)',
-                  }} />
-                </motion.div>
-                <span style={{
-                  fontSize: '0.7rem',
-                  color: 'var(--ochre-dark)',
-                  fontFamily: 'var(--font-body)',
-                  letterSpacing: '0.05em',
-                }}>
-                  GRIMM'S LAW
-                </span>
-              </motion.div>
+                  <PIEForm root={shift.pieLetter} style={{ fontSize: '1.8rem' }} />
+                  <span style={{ color, fontSize: '1.2rem' }}>→</span>
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: '1.8rem',
+                      color,
+                      fontWeight: 500,
+                    }}
+                  >
+                    {reflex?.result}
+                  </span>
+                </div>
+                <div
+                  aria-hidden="true"
+                  style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--text-on-dark-muted)',
+                    fontFamily: 'var(--font-body)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  {shift.description}
+                </div>
+                {isActive && (
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      marginTop: '0.5rem',
+                      fontSize: '0.7rem',
+                      fontFamily: 'var(--font-body)',
+                      color: 'var(--text-on-dark-secondary)',
+                      letterSpacing: '0.04em',
+                    }}
+                  >
+                    Example shown below ▾
+                  </div>
+                )}
+              </motion.button>
+            )
+          })}
+        </div>
 
-              {/* Germanic result */}
-              <motion.div
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.5 }}
-                style={{ textAlign: 'center' }}
+        <AnimatePresence mode="wait">
+          {selectedShift && selectedReflex?.example && (
+            <motion.div
+              key={selectedShift.pieLetter}
+              initial={reduced ? false : { opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={reduced ? { opacity: 1 } : { opacity: 0, y: -10 }}
+              transition={{ duration: reduced ? 0 : 0.4 }}
+              style={{
+                padding: '2rem',
+                background: withAlpha(brand.bgDeep, 0.6),
+                borderRadius: 16,
+                border: `1px solid ${surface.cardBorderSubtle}`,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--text-on-dark-muted)',
+                  fontFamily: 'var(--font-body)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.1em',
+                  marginBottom: '1.5rem',
+                }}
               >
-                <div style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
-                  fontWeight: 500,
-                  color: Object.values(SHIFT_TYPE_COLORS)[activeGroup],
-                }}>
-                  {selectedShift.shifts[0].example.daughter}
-                </div>
-                <div style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-on-dark-muted)',
-                  marginTop: '0.3rem',
-                  fontFamily: 'var(--font-body)',
-                }}>
-                  English (Germanic)
-                </div>
-              </motion.div>
-            </div>
+                Example: “{selectedReflex.example.meaning}”
+              </div>
 
-            {/* Other branches for comparison */}
-            {selectedShift.shifts.length > 1 && (
-              <div style={{
-                marginTop: '1.5rem',
-                paddingTop: '1rem',
-                borderTop: '1px solid rgba(139, 115, 85, 0.2)',
-              }}>
-                <div style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--text-on-dark-muted)',
-                  marginBottom: '0.75rem',
-                  fontFamily: 'var(--font-body)',
-                }}>
-                  Same root in other branches (no Grimm's Law shift):
-                </div>
-                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  {selectedShift.shifts.slice(1).map(s => (
-                    s.example && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '1.5rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: reduced ? 0 : 0.1 }}
+                  style={{ textAlign: 'center' }}
+                >
+                  <PIEForm
+                    root={selectedReflex.example.pie}
+                    style={{ fontSize: 'clamp(1.5rem, 4vw, 2.5rem)' }}
+                  />
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--text-on-dark-muted)',
+                      marginTop: '0.3rem',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    Proto-Indo-European
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: reduced ? 0 : 0.3 }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                  }}
+                >
+                  <motion.div
+                    animate={reduced ? undefined : { rotate: 360 }}
+                    transition={reduced ? undefined : { duration: 2, repeat: Infinity, ease: 'linear' }}
+                    aria-hidden="true"
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: '50%',
+                      border: `2px solid ${brand.bronze}`,
+                      borderTopColor: brand.ochreLight,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: brand.ochreLight,
+                      }}
+                    />
+                  </motion.div>
+                  <span
+                    style={{
+                      fontSize: '0.7rem',
+                      color: brand.ochreLight,
+                      fontFamily: 'var(--font-body)',
+                      letterSpacing: '0.05em',
+                      textAlign: 'center',
+                    }}
+                  >
+                    Grimm's Law: {selectedShift.pieLetter} → {selectedReflex.result}
+                  </span>
+                </motion.div>
+
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: reduced ? 0 : 0.5 }}
+                  style={{ textAlign: 'center' }}
+                >
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
+                      fontWeight: 500,
+                      color,
+                    }}
+                  >
+                    {selectedReflex.example.daughter}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--text-on-dark-muted)',
+                      marginTop: '0.3rem',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    English (Germanic)
+                  </div>
+                </motion.div>
+              </div>
+
+              {selectedShift.note && (
+                <p
+                  style={{
+                    marginTop: '1.5rem',
+                    marginBottom: 0,
+                    fontSize: '0.82rem',
+                    lineHeight: 1.6,
+                    color: 'var(--text-on-dark-secondary)',
+                    fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {selectedShift.note}
+                </p>
+              )}
+
+              {otherBranches.length > 0 && (
+                <div
+                  style={{
+                    marginTop: '1.5rem',
+                    paddingTop: '1rem',
+                    borderTop: `1px solid ${withAlpha(brand.bronze, 0.2)}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: 'var(--text-on-dark-muted)',
+                      marginBottom: '0.75rem',
+                      fontFamily: 'var(--font-body)',
+                    }}
+                  >
+                    The same root in branches Grimm's Law never touched — each label names the change
+                    that produced that form instead:
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {otherBranches.map(entry => (
                       <span
-                        key={s.branch}
+                        key={entry.branch}
                         style={{
-                          padding: '0.3rem 0.7rem',
-                          background: 'rgba(0,0,0,0.25)',
+                          padding: '0.35rem 0.7rem',
+                          background: withAlpha(brand.bgDeep, 0.55),
                           borderRadius: 16,
                           fontFamily: 'var(--font-display)',
                           fontSize: '0.9rem',
-                          color: 'var(--text-on-dark-secondary)',
+                          color: 'var(--text-on-dark)',
                         }}
                       >
-                        {s.example.daughter}
-                        <span style={{
-                          fontSize: '0.7rem',
-                          color: 'var(--text-on-dark-muted)',
-                          marginLeft: '0.4rem',
-                          fontFamily: 'var(--font-body)',
-                        }}>
-                          {s.branch}
+                        {entry.example?.daughter}
+                        <span
+                          style={{
+                            fontSize: '0.7rem',
+                            color: 'var(--text-on-dark-muted)',
+                            marginLeft: '0.4rem',
+                            fontFamily: 'var(--font-body)',
+                          }}
+                        >
+                          {entry.branch}
+                          {entry.changeType ? ` · ${entry.changeType}` : ''}
                         </span>
                       </span>
-                    )
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }

@@ -1,397 +1,679 @@
-import { useState } from 'react'
+import { memo, useCallback, useId, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cognates, type CognateEntry } from '../../data/cognates'
-import InteractiveLabel from '../ui/InteractiveLabel'
-
-/** Extract the primary word form, stripping parenthetical annotations */
-function shortForm(form: string): string {
-  if (!form) return '-'
-  // If it starts with "(" it's a note like "(not attested...)"
-  if (form.startsWith('(')) return form
-  // Extract the first word/phrase before any parenthetical
-  const match = form.match(/^([^(]+?)(?:\s*\(|$)/)
-  return match ? match[1].trim() : form
-}
-
-/** Extract the reason from a parenthetical annotation like "(not attested; Slavic lost this root)" */
-function extractReason(form: string): string | null {
-  if (!form) return 'No cognate attested in this language'
-  const match = form.match(/^\((.+)\)$/)
-  if (match) {
-    // Clean up the inner text — remove leading "not attested" prefix variations and semicolons
-    let reason = match[1].trim()
-    // Capitalize first letter
-    reason = reason.charAt(0).toUpperCase() + reason.slice(1)
-    return reason
-  }
-  return null
-}
+import PIEForm from '../ui/PIEForm'
+import VizHeading from '../ui/VizHeading'
+import useReducedMotion from '../../hooks/useReducedMotion'
+import { vizPalette, withAlpha, brand } from '../../theme'
 
 const LANGUAGES = [
   'English', 'Latin', 'Greek', 'Sanskrit',
   'Russian', 'Irish', 'Persian', 'Lithuanian',
 ]
 
-const LANG_COLORS: Record<string, string> = {
-  English: '#E8DCC8',
-  Latin: '#D4A574',
-  Greek: '#7DB8A0',
-  Sanskrit: '#D4BC8B',
-  Russian: '#A8B4C4',
-  Irish: '#8CC084',
-  Persian: '#C4A0B8',
-  Lithuanian: '#B8C4A0',
+/** Stable language → categorical colour, assigned by index into the shared palette. */
+const LANG_COLORS: Record<string, string> = Object.fromEntries(
+  LANGUAGES.map((lang, index) => [lang, vizPalette[index % vizPalette.length]] as const),
+)
+
+/** One definition of the row layout, shared by the header, the rows and the column overlay. */
+const GRID_COLUMNS = `130px repeat(${LANGUAGES.length}, minmax(0, 1fr))`
+
+/** Below this width the grid stops shrinking and the wrapper scrolls sideways instead. */
+const GRID_MIN_WIDTH = 740
+
+/** Glyph standing in for a language that never inherited the root. */
+const NO_COGNATE_MARK = '–'
+
+const GENERIC_REASON = 'No cognate attested in this language'
+
+/**
+ * `src/data/cognates.ts` marks a missing form with a placeholder whose first
+ * character is "(" — e.g. "(no cognate; Slavic lost this root)". Real forms
+ * never open with "(", though they may carry a trailing script or gloss
+ * parenthetical. This is the single test for "no cognate here"; every caller
+ * in this file goes through it rather than re-deriving the rule.
+ */
+function isPlaceholder(form: string | undefined): boolean {
+  return !form || form.trimStart().startsWith('(')
 }
 
-export default function CognateExplorer() {
-  const [selectedCognate, setSelectedCognate] = useState<CognateEntry | null>(null)
-  const [hoveredLang, setHoveredLang] = useState<string | null>(null)
+/** The citable word on its own, with any trailing script/gloss parenthetical dropped. */
+function shortForm(form: string): string {
+  if (!form) return NO_COGNATE_MARK
+  const match = form.match(/^([^(]+?)(?:\s*\(|$)/)
+  return match ? match[1].trim() : form
+}
+
+/**
+ * Renders a placeholder as prose: strips the wrapping parentheses and
+ * capitalises the first letter, so "(no cognate; uses tėvas)" reads as
+ * "No cognate; uses tėvas".
+ */
+function placeholderReason(form: string | undefined): string {
+  if (!form) return GENERIC_REASON
+  const wrapped = form.trim().match(/^\((.*)\)$/)
+  const inner = (wrapped ? wrapped[1] : form).trim()
+  if (!inner) return GENERIC_REASON
+  return inner.charAt(0).toUpperCase() + inner.slice(1)
+}
+
+/** Lowercases and drops combining diacritics, so "pater" matches "patḗr". */
+function fold(value: string): string {
+  return value.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase()
+}
+
+/**
+ * Pre-folded search text per entry. The data is a static import, so this is
+ * built once at module load rather than on every keystroke. Placeholders are
+ * excluded — otherwise every query containing "cognate" would match all rows.
+ */
+const SEARCH_INDEX: { entry: CognateEntry; haystack: string }[] = cognates.map(entry => {
+  const attested = LANGUAGES
+    .map(lang => entry.forms[lang])
+    .filter(form => !isPlaceholder(form))
+  return {
+    entry,
+    haystack: fold([entry.pieRoot, entry.meaning, ...attested].join(' ')),
+  }
+})
+
+const rowGridStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: GRID_COLUMNS,
+  gap: 2,
+}
+
+const meaningCellStyle: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '0.4rem',
+  padding: '0.6rem 0.5rem',
+  fontSize: '0.85rem',
+  fontFamily: 'var(--font-body)',
+  fontWeight: 500,
+  textAlign: 'left',
+  background: 'none',
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+  transition: 'color 0.2s',
+}
+
+const formCellStyle: CSSProperties = {
+  padding: '0.6rem 0.4rem',
+  textAlign: 'center',
+  fontFamily: 'var(--font-display)',
+  fontSize: '0.9rem',
+  transition: 'color 0.2s',
+}
+
+const missingCellStyle: CSSProperties = {
+  padding: '0.6rem 0.4rem',
+  minHeight: 32,
+  fontFamily: 'var(--font-display)',
+  fontSize: '0.85rem',
+  color: 'var(--text-on-dark-muted)',
+  background: 'none',
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+}
+
+const noteStyle: CSSProperties = {
+  padding: '0.5rem 0.75rem 0.65rem',
+  fontFamily: 'var(--font-body)',
+  fontSize: '0.8rem',
+  lineHeight: 1.5,
+  color: 'var(--text-on-dark-secondary)',
+  borderTop: `1px solid ${withAlpha(brand.bronze, 0.25)}`,
+}
+
+const headerLabelStyle: CSSProperties = {
+  padding: '0.6rem 0.5rem',
+  fontSize: '0.75rem',
+  color: 'var(--text-on-dark-muted)',
+  fontFamily: 'var(--font-body)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+}
+
+interface CognateRowProps {
+  entry: CognateEntry
+  isSelected: boolean
+  /** Panel the meaning button expands, for `aria-controls`. */
+  detailPanelId: string
+  onToggle: (entry: CognateEntry) => void
+}
+
+/**
+ * One cognate set. Memoised, and it keeps its own hover/disclosure state, so
+ * highlighting a column or opening a note re-renders a single row instead of
+ * all seventy-odd.
+ */
+const CognateRow = memo(function CognateRow({
+  entry,
+  isSelected,
+  detailPanelId,
+  onToggle,
+}: CognateRowProps) {
+  const [isHovered, setIsHovered] = useState(false)
+  const [previewLang, setPreviewLang] = useState<string | null>(null)
+  const [pinnedLang, setPinnedLang] = useState<string | null>(null)
+  const noteId = useId()
+
+  /**
+   * Hover and focus *preview* a note; clicking *pins* it. The two must stay
+   * separate: a tap fires mouseenter/focus and then click on the same element,
+   * so a single toggle would open the note and instantly close it again —
+   * leaving touch users with no way to read it at all. Preview wins over pin
+   * so that pointing at a second dash still responds while one is pinned.
+   */
+  const openLang = previewLang ?? pinnedLang
+  const clearPreview = (lang: string) =>
+    setPreviewLang(current => (current === lang ? null : current))
+
+  const background = isSelected
+    ? withAlpha(brand.teal, isHovered ? 0.18 : 0.12)
+    : withAlpha(brand.bgElevated, isHovered ? 0.9 : 0.6)
 
   return (
-    <div style={{ width: '100%' }}>
-      {/* Section intro */}
-      <div style={{ marginBottom: '2rem' }}>
-        <InteractiveLabel />
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(1.5rem, 3vw, 2rem)',
-          color: 'var(--text-bright)',
-          marginBottom: '0.75rem',
-        }}>
-          The Cognate Explorer
-        </h3>
-        <p style={{
-          color: 'var(--text-on-dark-secondary)',
-          fontSize: '1rem',
-        }}>
-          Click any word below to see its cousins across eight Indo-European languages, and the ancient root they all descend from.
-        </p>
-      </div>
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      style={{
+        position: 'relative',
+        zIndex: 1,
+        borderRadius: 6,
+        background,
+        border: `1px solid ${isSelected ? withAlpha(brand.teal, 0.35) : 'transparent'}`,
+        transition: 'background 0.2s, border-color 0.2s',
+      }}
+    >
+      <div style={rowGridStyle}>
+        <button
+          type="button"
+          onClick={() => onToggle(entry)}
+          aria-expanded={isSelected}
+          aria-controls={isSelected ? detailPanelId : undefined}
+          style={{
+            ...meaningCellStyle,
+            color: isSelected ? 'var(--teal-light)' : 'var(--text-on-dark-secondary)',
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: '0.7rem', opacity: 0.8 }}>
+            {isSelected ? '▾' : '▸'}
+          </span>
+          {entry.meaning}
+        </button>
 
-      <style>{`
-        @media (max-width: 768px) {
-          .cognate-grid-scroll {
-            overflow-x: auto;
-            -webkit-overflow-scrolling: touch;
-            margin: 0 -0.5rem;
-            padding: 0 0.5rem;
+        {LANGUAGES.map(lang => {
+          const form = entry.forms[lang]
+
+          if (isPlaceholder(form)) {
+            const isOpen = openLang === lang
+            return (
+              <button
+                key={lang}
+                type="button"
+                aria-expanded={isOpen}
+                aria-controls={isOpen ? noteId : undefined}
+                aria-label={`No ${lang} cognate for "${entry.meaning}" — show why`}
+                onClick={() => setPinnedLang(current => (current === lang ? null : lang))}
+                onMouseEnter={() => setPreviewLang(lang)}
+                onMouseLeave={() => clearPreview(lang)}
+                onFocus={() => setPreviewLang(lang)}
+                onBlur={() => clearPreview(lang)}
+                style={{
+                  ...missingCellStyle,
+                  background: isOpen ? withAlpha(brand.bronze, 0.2) : 'none',
+                  textDecoration: 'underline dotted',
+                  textUnderlineOffset: 4,
+                }}
+              >
+                {NO_COGNATE_MARK}
+              </button>
+            )
           }
-          .cognate-grid-scroll > * {
-            min-width: 700px;
-          }
-          .cognate-vertical-scroll {
-            max-height: 60vh;
-          }
-        }
-        .cognate-vertical-scroll::-webkit-scrollbar {
-          width: 6px;
-        }
-        .cognate-vertical-scroll::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .cognate-vertical-scroll::-webkit-scrollbar-thumb {
-          background: rgba(139, 115, 85, 0.3);
-          border-radius: 3px;
-        }
-      `}</style>
-
-      {/* Legend for missing cognates */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        marginBottom: '0.75rem',
-        fontSize: '0.75rem',
-        color: 'var(--text-on-dark-muted)',
-        fontFamily: 'var(--font-body)',
-      }}>
-        <span style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          width: 18,
-          height: 18,
-          fontSize: '0.75rem',
-          color: 'var(--text-on-dark-muted)',
-          fontFamily: 'var(--font-display)',
-        }}>
-          –
-        </span>
-        <span>= not attested in that language (hover for details)</span>
-      </div>
-
-      {/* Scrollable grid wrapper for mobile */}
-      <div className="cognate-grid-scroll">
-      <div className="cognate-vertical-scroll" style={{
-        maxHeight: '70vh',
-        overflowY: 'auto',
-      }}>
-
-      {/* Language header row */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '100px repeat(8, 1fr)',
-        gap: 0,
-        marginBottom: '2px',
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-        background: 'var(--bg-surface)',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-      }}>
-        <div style={{
-          padding: '0.6rem 0.5rem',
-          fontSize: '0.75rem',
-          color: 'var(--text-on-dark-muted)',
-          fontFamily: 'var(--font-body)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-        }}>
-          Meaning
-        </div>
-        {LANGUAGES.map(lang => (
-          <div
-            key={lang}
-            onMouseEnter={() => setHoveredLang(lang)}
-            onMouseLeave={() => setHoveredLang(null)}
-            style={{
-              padding: '0.6rem 0.4rem',
-              fontSize: '0.7rem',
-              color: hoveredLang === lang ? LANG_COLORS[lang] : 'var(--text-on-dark-muted)',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              textAlign: 'center',
-              transition: 'color 0.2s',
-              cursor: 'default',
-              borderBottom: `2px solid ${hoveredLang === lang ? LANG_COLORS[lang] : 'transparent'}`,
-            }}
-          >
-            {lang}
-          </div>
-        ))}
-      </div>
-
-      {/* Cognate grid */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {cognates.map((entry) => {
-          const isSelected = selectedCognate?.pieRoot === entry.pieRoot
 
           return (
-            <motion.button
-              key={entry.pieRoot}
-              onClick={() => setSelectedCognate(isSelected ? null : entry)}
-              aria-label={`View cognates for "${entry.meaning}"`}
-              layout
+            <div
+              key={lang}
               style={{
-                display: 'grid',
-                gridTemplateColumns: '100px repeat(8, 1fr)',
-                gap: '2px',
-                background: isSelected
-                  ? 'rgba(13, 115, 119, 0.1)'
-                  : 'rgba(34, 40, 54, 0.6)',
-                border: isSelected
-                  ? '1px solid rgba(13, 115, 119, 0.3)'
-                  : '1px solid transparent',
-                borderRadius: 6,
-                cursor: 'pointer',
-                padding: 0,
-                width: '100%',
-                transition: 'background 0.2s, border 0.2s',
-                textAlign: 'left',
-              }}
-              whileHover={{
-                background: isSelected
-                  ? 'rgba(13, 115, 119, 0.15)'
-                  : 'rgba(34, 40, 54, 0.9)',
+                ...formCellStyle,
+                color: isSelected ? LANG_COLORS[lang] : 'var(--text-on-dark)',
               }}
             >
-              {/* Meaning cell */}
-              <div style={{
-                padding: '0.6rem 0.5rem',
-                fontSize: '0.85rem',
-                color: isSelected ? 'var(--teal-light)' : 'var(--text-on-dark-secondary)',
-                fontFamily: 'var(--font-body)',
-                fontWeight: 500,
-                display: 'flex',
-                alignItems: 'center',
-              }}>
-                {entry.meaning}
-              </div>
-
-              {/* Language cells */}
-              {LANGUAGES.map(lang => {
-                const form = entry.forms[lang]
-                const isNotAttested = !form || form.includes('not attested') || form.startsWith('(no ') || form.startsWith('(not ')
-                const reason = isNotAttested ? extractReason(form) : null
-                return (
-                  <div
-                    key={lang}
-                    title={reason || undefined}
-                    style={{
-                      padding: '0.6rem 0.4rem',
-                      textAlign: 'center',
-                      fontFamily: 'var(--font-display)',
-                      fontSize: isNotAttested ? '0.75rem' : '0.9rem',
-                      color: isNotAttested
-                        ? 'var(--text-on-dark-muted)'
-                        : isSelected
-                          ? LANG_COLORS[lang]
-                          : 'var(--text-on-dark)',
-                      fontStyle: 'normal',
-                      opacity: isNotAttested ? 0.6 : (hoveredLang === lang ? 1 : 0.85),
-                      transition: 'color 0.2s, opacity 0.2s',
-                      background: hoveredLang === lang
-                        ? 'rgba(255,255,255,0.03)'
-                        : 'transparent',
-                      cursor: isNotAttested ? 'help' : undefined,
-                    }}
-                  >
-                    {isNotAttested ? '–' : shortForm(form)}
-                  </div>
-                )
-              })}
-            </motion.button>
+              {shortForm(form)}
+            </div>
           )
         })}
       </div>
 
-      </div>{/* end cognate-vertical-scroll */}
-      </div>{/* end cognate-grid-scroll */}
+      {openLang && (
+        <div id={noteId} style={noteStyle}>
+          <span style={{ color: LANG_COLORS[openLang], fontWeight: 600 }}>{openLang}</span>
+          {' — '}
+          {placeholderReason(entry.forms[openLang])}
+        </div>
+      )}
+    </div>
+  )
+})
 
-      {/* Selected cognate detail panel */}
+export default function CognateExplorer() {
+  const [selectedCognate, setSelectedCognate] = useState<CognateEntry | null>(null)
+  const [hoveredLang, setHoveredLang] = useState<string | null>(null)
+  const [pinnedLang, setPinnedLang] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
+
+  const reducedMotion = useReducedMotion()
+  const searchId = useId()
+  const detailPanelId = useId()
+
+  const results = useMemo(() => {
+    const needle = fold(query.trim())
+    if (!needle) return cognates
+    return SEARCH_INDEX.filter(item => item.haystack.includes(needle)).map(item => item.entry)
+  }, [query])
+
+  const handleToggle = useCallback((entry: CognateEntry) => {
+    setSelectedCognate(current => (current?.pieRoot === entry.pieRoot ? null : entry))
+  }, [])
+
+  // Hover/focus wins over the pin, so pointing at another column still
+  // responds while one is pinned; the pin comes back when the pointer leaves.
+  const highlightedLang = hoveredLang ?? pinnedLang
+  const highlightIndex = highlightedLang ? LANGUAGES.indexOf(highlightedLang) : -1
+
+  const attestedLangs = selectedCognate
+    ? LANGUAGES.filter(lang => !isPlaceholder(selectedCognate.forms[lang]))
+    : []
+  const missingLangs = selectedCognate
+    ? LANGUAGES
+      .filter(lang => isPlaceholder(selectedCognate.forms[lang]))
+      .map(lang => ({ lang, reason: placeholderReason(selectedCognate.forms[lang]) }))
+    : []
+
+  return (
+    <div style={{ width: '100%' }}>
+      <VizHeading title="The Cognate Explorer">
+        Search or scroll the table, then select any meaning to see the ancient root its words
+        descend from. A dash marks a language that never inherited the root — select it to read
+        what happened instead.
+      </VizHeading>
+
+      <div style={{ marginBottom: '1rem', maxWidth: 460 }}>
+        <label
+          htmlFor={searchId}
+          style={{
+            display: 'block',
+            marginBottom: '0.35rem',
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-body)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--text-on-dark-muted)',
+          }}
+        >
+          Search roots, meanings and word forms
+        </label>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Escape') setQuery('')
+            }}
+            placeholder="e.g. father, pater, *dyew, night"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              padding: '0.55rem 0.75rem',
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.9rem',
+              color: 'var(--text-on-dark)',
+              background: withAlpha(brand.bgDeep, 0.6),
+              border: `1px solid ${withAlpha(brand.bronze, 0.35)}`,
+              borderRadius: 8,
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            disabled={query === ''}
+            style={{
+              padding: '0.55rem 0.9rem',
+              fontFamily: 'var(--font-body)',
+              fontSize: '0.8rem',
+              color: query ? 'var(--text-on-dark-secondary)' : 'var(--text-on-dark-muted)',
+              background: 'none',
+              border: `1px solid ${withAlpha(brand.bronze, query ? 0.35 : 0.15)}`,
+              borderRadius: 8,
+              cursor: query ? 'pointer' : 'default',
+              opacity: query ? 1 : 0.5,
+            }}
+          >
+            Clear
+          </button>
+        </div>
+        <p
+          role="status"
+          aria-live="polite"
+          style={{
+            marginTop: '0.4rem',
+            marginBottom: 0,
+            fontSize: '0.75rem',
+            fontFamily: 'var(--font-body)',
+            color: 'var(--text-on-dark-muted)',
+          }}
+        >
+          {query.trim()
+            ? `${results.length} of ${cognates.length} roots match "${query.trim()}"`
+            : `Showing all ${cognates.length} roots`}
+        </p>
+      </div>
+
+      <p
+        style={{
+          marginBottom: '0.75rem',
+          fontSize: '0.75rem',
+          fontFamily: 'var(--font-body)',
+          color: 'var(--text-on-dark-muted)',
+        }}
+      >
+        <span style={{ fontFamily: 'var(--font-display)' }}>{NO_COGNATE_MARK}</span>
+        {' = no cognate in that language. Select a dash, or a column heading, for details.'}
+      </p>
+
+      <div
+        role="region"
+        aria-label="Cognate comparison table — scrollable"
+        tabIndex={0}
+        style={{
+          maxHeight: 'min(70vh, 640px)',
+          overflow: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        <div style={{ minWidth: GRID_MIN_WIDTH }}>
+          <div
+            style={{
+              ...rowGridStyle,
+              gap: 0,
+              marginBottom: 2,
+              position: 'sticky',
+              top: 0,
+              zIndex: 10,
+              background: 'var(--bg-surface)',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
+            }}
+          >
+            <div style={headerLabelStyle}>Meaning</div>
+            {LANGUAGES.map(lang => {
+              const isActive = highlightedLang === lang
+              const isPinned = pinnedLang === lang
+              return (
+                <button
+                  key={lang}
+                  type="button"
+                  aria-pressed={isPinned}
+                  aria-label={`${lang} — keep this column highlighted`}
+                  onClick={() => setPinnedLang(current => (current === lang ? null : lang))}
+                  onMouseEnter={() => setHoveredLang(lang)}
+                  onMouseLeave={() => setHoveredLang(null)}
+                  onFocus={() => setHoveredLang(lang)}
+                  onBlur={() => setHoveredLang(null)}
+                  style={{
+                    padding: '0.6rem 0.4rem',
+                    fontSize: '0.7rem',
+                    fontFamily: 'var(--font-body)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                    textAlign: 'center',
+                    color: isActive ? LANG_COLORS[lang] : 'var(--text-on-dark-muted)',
+                    background: 'none',
+                    border: 'none',
+                    borderBottom: `2px solid ${isActive ? LANG_COLORS[lang] : 'transparent'}`,
+                    cursor: 'pointer',
+                    transition: 'color 0.2s, border-color 0.2s',
+                  }}
+                >
+                  {lang}
+                  {isPinned && <span aria-hidden="true"> ●</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          {results.length === 0 ? (
+            <div
+              style={{
+                padding: '2.5rem 1rem',
+                textAlign: 'center',
+                fontFamily: 'var(--font-body)',
+                color: 'var(--text-on-dark-secondary)',
+              }}
+            >
+              <p style={{ marginBottom: '0.75rem' }}>
+                No root, meaning or word form matches "{query.trim()}".
+              </p>
+              <button
+                type="button"
+                onClick={() => setQuery('')}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.85rem',
+                  color: 'var(--teal-light)',
+                  background: withAlpha(brand.teal, 0.15),
+                  border: `1px solid ${withAlpha(brand.teal, 0.35)}`,
+                  borderRadius: 8,
+                  cursor: 'pointer',
+                }}
+              >
+                Clear the search
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+              }}
+            >
+              {results.map(entry => (
+                <CognateRow
+                  key={entry.pieRoot}
+                  entry={entry}
+                  isSelected={selectedCognate?.pieRoot === entry.pieRoot}
+                  detailPanelId={detailPanelId}
+                  onToggle={handleToggle}
+                />
+              ))}
+
+              {highlightIndex >= 0 && highlightedLang && (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    ...rowGridStyle,
+                    position: 'absolute',
+                    inset: 0,
+                    pointerEvents: 'none',
+                    zIndex: 2,
+                  }}
+                >
+                  <div
+                    style={{
+                      gridColumn: highlightIndex + 2,
+                      boxSizing: 'border-box',
+                      borderRadius: 6,
+                      background: withAlpha(LANG_COLORS[highlightedLang], 0.08),
+                      border: `1px solid ${withAlpha(LANG_COLORS[highlightedLang], 0.35)}`,
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
       <AnimatePresence>
         {selectedCognate && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
+            transition={{ duration: reducedMotion ? 0 : 0.3 }}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{
-              marginTop: '1.5rem',
-              padding: '1.5rem',
-              background: 'rgba(20, 24, 32, 0.6)',
-              borderRadius: 12,
-              border: '1px solid rgba(200, 169, 110, 0.12)',
-            }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'baseline',
-                gap: '1rem',
-                marginBottom: '1rem',
-                flexWrap: 'wrap',
-              }}>
-                <span style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: '1.8rem',
-                  fontStyle: 'italic',
-                  color: 'var(--ochre)',
-                }}>
-                  <span style={{ color: 'var(--teal-light)' }}>*</span>
-                  {selectedCognate.pieRoot.replace('*', '')}
-                </span>
-                <span style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '0.9rem',
-                  color: 'var(--text-on-dark-muted)',
-                }}>
+            <div
+              id={detailPanelId}
+              role="region"
+              aria-label={`Details for ${selectedCognate.pieRoot}, "${selectedCognate.meaning}"`}
+              style={{
+                marginTop: '1.5rem',
+                padding: '1.5rem',
+                background: withAlpha(brand.bgDeep, 0.6),
+                borderRadius: 12,
+                border: `1px solid ${withAlpha(brand.ochreLight, 0.12)}`,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  gap: '1rem',
+                  marginBottom: '1rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <PIEForm root={selectedCognate.pieRoot} style={{ fontSize: '1.8rem' }} />
+                <span
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.9rem',
+                    color: 'var(--text-on-dark-muted)',
+                  }}
+                >
                   Proto-Indo-European &middot; "{selectedCognate.meaning}"
                 </span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCognate(null)}
+                  style={{
+                    marginLeft: 'auto',
+                    padding: '0.35rem 0.75rem',
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.75rem',
+                    color: 'var(--text-on-dark-secondary)',
+                    background: 'none',
+                    border: `1px solid ${withAlpha(brand.bronze, 0.35)}`,
+                    borderRadius: 8,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Close
+                </button>
               </div>
 
               {selectedCognate.soundNotes && (
-                <p style={{
-                  fontFamily: 'var(--font-body)',
-                  fontSize: '0.9rem',
-                  color: 'var(--text-on-dark-secondary)',
-                  lineHeight: 1.6,
-                  maxWidth: '65ch',
-                  marginBottom: 0,
-                }}>
+                <p
+                  style={{
+                    fontFamily: 'var(--font-body)',
+                    fontSize: '0.9rem',
+                    color: 'var(--text-on-dark-secondary)',
+                    lineHeight: 1.6,
+                    maxWidth: '65ch',
+                    marginBottom: 0,
+                  }}
+                >
                   {selectedCognate.soundNotes}
                 </p>
               )}
 
-              {/* Visual flow of cognates */}
-              <div style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '0.5rem',
-                marginTop: '1rem',
-              }}>
-                {LANGUAGES.map(lang => {
-                  const form = selectedCognate.forms[lang]
-                  if (!form || form.includes('not attested') || form.startsWith('(')) return null
-                  return (
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '0.5rem',
+                  marginTop: '1rem',
+                }}
+              >
+                {attestedLangs.map(lang => (
+                  <span
+                    key={lang}
+                    style={{
+                      padding: '0.35rem 0.75rem',
+                      background: withAlpha(brand.bgDeep, 0.5),
+                      borderRadius: 20,
+                      fontFamily: 'var(--font-display)',
+                      fontSize: '0.95rem',
+                      color: LANG_COLORS[lang],
+                      border: `1px solid ${withAlpha(LANG_COLORS[lang], 0.2)}`,
+                    }}
+                  >
+                    {shortForm(selectedCognate.forms[lang])}
                     <span
-                      key={lang}
                       style={{
-                        padding: '0.35rem 0.75rem',
-                        background: 'rgba(0,0,0,0.3)',
-                        borderRadius: 20,
-                        fontFamily: 'var(--font-display)',
-                        fontSize: '0.95rem',
-                        color: LANG_COLORS[lang],
-                        border: `1px solid ${LANG_COLORS[lang]}33`,
-                      }}
-                    >
-                      {shortForm(form)}
-                      <span style={{
                         fontSize: '0.7rem',
                         color: 'var(--text-on-dark-muted)',
                         marginLeft: '0.4rem',
                         fontFamily: 'var(--font-body)',
-                      }}>
-                        {lang}
-                      </span>
+                      }}
+                    >
+                      {lang}
                     </span>
-                  )
-                })}
+                  </span>
+                ))}
               </div>
 
-              {/* Missing cognate explanations */}
-              {(() => {
-                const missing = LANGUAGES
-                  .filter(lang => {
-                    const form = selectedCognate.forms[lang]
-                    return !form || form.includes('not attested') || form.startsWith('(no ') || form.startsWith('(not ')
-                  })
-                  .map(lang => ({ lang, reason: extractReason(selectedCognate.forms[lang]) }))
-                if (missing.length === 0) return null
-                return (
-                  <div style={{
+              {missingLangs.length > 0 && (
+                <div
+                  style={{
                     marginTop: '1rem',
                     padding: '0.75rem 1rem',
-                    background: 'rgba(0,0,0,0.2)',
+                    background: withAlpha(brand.bgDeep, 0.4),
                     borderRadius: 8,
-                    border: '1px solid rgba(255,255,255,0.05)',
-                  }}>
-                    <div style={{
+                    border: `1px solid ${withAlpha(brand.bronze, 0.2)}`,
+                  }}
+                >
+                  <h4
+                    style={{
                       fontSize: '0.75rem',
                       color: 'var(--text-on-dark-muted)',
                       fontFamily: 'var(--font-body)',
                       textTransform: 'uppercase',
                       letterSpacing: '0.08em',
                       marginBottom: '0.4rem',
-                    }}>
-                      Not attested
-                    </div>
-                    {missing.map(({ lang, reason }) => (
-                      <div key={lang} style={{
+                      fontWeight: 600,
+                    }}
+                  >
+                    Not attested
+                  </h4>
+                  {missingLangs.map(({ lang, reason }) => (
+                    <div
+                      key={lang}
+                      style={{
                         fontSize: '0.8rem',
                         color: 'var(--text-on-dark-muted)',
                         fontFamily: 'var(--font-body)',
                         lineHeight: 1.5,
-                      }}>
-                        <span style={{ color: LANG_COLORS[lang], opacity: 0.75 }}>{lang}</span>
-                        {reason && <span> — {reason}</span>}
-                      </div>
-                    ))}
-                  </div>
-                )
-              })()}
+                      }}
+                    >
+                      <span style={{ color: LANG_COLORS[lang], opacity: 0.75 }}>{lang}</span>
+                      {' — '}
+                      {reason}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
