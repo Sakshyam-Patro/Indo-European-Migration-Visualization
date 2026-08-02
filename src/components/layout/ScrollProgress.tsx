@@ -1,8 +1,11 @@
-import { useScrollProgress } from '../../hooks/useScrollProgress';
+import { PROGRESS_BAR_HEIGHT } from './Header'
 
-export function ScrollProgress() {
-  const progress = useScrollProgress();
+interface ScrollProgressProps {
+  /** 0-1 fraction of the document scrolled, supplied by the app-level listener. */
+  progress: number
+}
 
+export function ScrollProgress({ progress }: ScrollProgressProps) {
   return (
     <div
       role="progressbar"
@@ -15,7 +18,7 @@ export function ScrollProgress() {
         top: 0,
         left: 0,
         width: '100%',
-        height: '3px',
+        height: PROGRESS_BAR_HEIGHT,
         backgroundColor: 'var(--bg-deep)',
         zIndex: 50,
       }}
@@ -25,11 +28,10 @@ export function ScrollProgress() {
           height: '100%',
           width: `${progress * 100}%`,
           backgroundColor: 'var(--ochre)',
-          transition: 'width 0.1s ease-out',
         }}
       />
     </div>
-  );
+  )
 }
 
-export default ScrollProgress;
+export default ScrollProgress

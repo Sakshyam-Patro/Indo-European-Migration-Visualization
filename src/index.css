@@ -43,11 +43,13 @@
   --text-on-light-secondary: #5A4E3A;
   --text-on-light-muted: #706454;
 
-  /* Backward compat aliases (default to dark) */
-  --text-primary: var(--text-on-dark);
-  --text-secondary: var(--text-on-dark-secondary);
-  --text-muted: var(--text-on-dark-muted);
   --text-bright: #F5F0E8;
+
+  /* Shared surface treatments (mirrored in src/theme.ts for SVG/canvas code) */
+  --card-border: rgba(212, 165, 55, 0.16);
+  --card-border-subtle: rgba(212, 165, 55, 0.09);
+  --card-shadow: 0 8px 40px rgba(0, 0, 0, 0.15);
+  --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
 
   /* Fonts */
   --font-display: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
@@ -194,6 +196,69 @@ a:hover {
 .pie-asterisk {
   color: var(--teal);
   font-style: normal;
+  font-weight: 700;
+}
+
+/* PIE forms pick up the contrast of whichever section mode contains them. */
+.section-dark .pie-form {
+  color: var(--ochre-light);
+}
+
+.section-dark .pie-asterisk {
+  color: var(--teal-light);
+}
+
+.section-light .pie-form {
+  color: var(--ochre-dark);
+}
+
+/* ========================================
+   SECTION EYEBROW
+   ======================================== */
+
+.section-eyebrow {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  color: var(--ochre);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+/* ========================================
+   FOCUS & SKIP LINK
+   ======================================== */
+
+:focus-visible {
+  outline: 2px solid var(--teal-light);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+
+.section-light :focus-visible {
+  outline-color: var(--teal);
+}
+
+.skip-link {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -150%);
+  z-index: 200;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-elevated);
+  color: var(--text-bright);
+  border: 1px solid var(--ochre);
+  border-radius: 0 0 8px 8px;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  transition: transform 0.2s ease;
+}
+
+.skip-link:focus {
+  transform: translate(-50%, 0);
+  color: var(--text-bright);
 }
 
 /* ========================================
@@ -337,11 +402,49 @@ a:hover {
 }
 
 .glow-text {
-  text-shadow: 0 0 40px rgba(200, 169, 110, 0.3);
+  text-shadow: 0 0 40px rgba(212, 165, 55, 0.3);
 }
 
 .teal-glow {
-  text-shadow: 0 0 30px rgba(42, 157, 143, 0.4);
+  text-shadow: 0 0 30px rgba(20, 145, 155, 0.4);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ========================================
+   REDUCED MOTION
+
+   Visitors who ask for less motion get the finished state of every
+   animation: no looping pulses, no dashed-line flow, no smooth scroll.
+   ======================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .interactive-hint::after,
+  .migration-active,
+  .territory-pulse,
+  .homeland-pulse {
+    animation: none !important;
+  }
+
+  .territory-pulse {
+    fill-opacity: 0.16;
+    stroke-opacity: 0.45;
+  }
 }
 
 /* ========================================
