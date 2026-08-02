@@ -1,30 +1,34 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion'
+import { useReducedMotion } from '../../hooks/useReducedMotion'
+
+/** Height of the ScrollProgress bar this header sits beneath. */
+export const PROGRESS_BAR_HEIGHT = 3
 
 interface HeaderProps {
-  visible: boolean;
-  activeSection: string;
-  sections: { id: string; label: string }[];
+  visible: boolean
+  activeSection: string
+  sections: { id: string; label: string }[]
 }
 
 export function Header({ visible, activeSection, sections }: HeaderProps) {
+  const reduced = useReducedMotion()
+
   const handleNavClick = (id: string) => {
-    const element = document.getElementById(id);
-    if (element) {
-      element.scrollIntoView({ behavior: 'smooth' });
-    }
-  };
+    const element = document.getElementById(id)
+    element?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth' })
+  }
 
   return (
     <AnimatePresence>
       {visible && (
         <motion.header
-          initial={{ y: -60, opacity: 0 }}
+          initial={reduced ? false : { y: -60, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -60, opacity: 0 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
+          exit={reduced ? { opacity: 0 } : { y: -60, opacity: 0 }}
+          transition={{ duration: reduced ? 0 : 0.3, ease: 'easeOut' }}
           style={{
             position: 'fixed',
-            top: 3, // below the scroll progress bar
+            top: PROGRESS_BAR_HEIGHT,
             left: 0,
             width: '100%',
             zIndex: 40,
@@ -40,10 +44,9 @@ export function Header({ visible, activeSection, sections }: HeaderProps) {
               justifyContent: 'space-between',
               maxWidth: '1400px',
               margin: '0 auto',
-              padding: '0.6rem 1.5rem',
+              padding: '0.25rem 1.5rem',
             }}
           >
-            {/* Site Title */}
             <span
               style={{
                 fontFamily: 'var(--font-display)',
@@ -56,47 +59,49 @@ export function Header({ visible, activeSection, sections }: HeaderProps) {
               Indo-European Explorer
             </span>
 
-            {/* Navigation Dots */}
-            <nav
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.75rem',
-              }}
-            >
-              {sections.map((section) => {
-                const isActive = activeSection === section.id;
+            <nav aria-label="Sections" style={{ display: 'flex', alignItems: 'center' }}>
+              {sections.map(section => {
+                const isActive = activeSection === section.id
                 return (
                   <button
                     key={section.id}
                     onClick={() => handleNavClick(section.id)}
                     title={section.label}
-                    aria-label={`Navigate to ${section.label}`}
-                    aria-current={isActive ? 'true' : undefined}
+                    aria-label={section.label}
+                    aria-current={isActive ? 'location' : undefined}
                     style={{
-                      width: isActive ? '10px' : '7px',
-                      height: isActive ? '10px' : '7px',
-                      borderRadius: '50%',
+                      // The dot stays small; the button keeps a 28px target.
+                      width: 28,
+                      height: 28,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      background: 'none',
                       border: 'none',
                       cursor: 'pointer',
                       padding: 0,
-                      backgroundColor: isActive
-                        ? 'var(--teal)'
-                        : 'var(--text-muted)',
-                      transition: 'all 0.25s ease',
-                      boxShadow: isActive
-                        ? '0 0 6px var(--teal)'
-                        : 'none',
                     }}
-                  />
-                );
+                  >
+                    <span
+                      style={{
+                        display: 'block',
+                        width: isActive ? 10 : 7,
+                        height: isActive ? 10 : 7,
+                        borderRadius: '50%',
+                        backgroundColor: isActive ? 'var(--teal-light)' : 'var(--text-on-dark-muted)',
+                        boxShadow: isActive ? '0 0 6px var(--teal-light)' : 'none',
+                        transition: 'width 0.25s ease, height 0.25s ease, background-color 0.25s ease',
+                      }}
+                    />
+                  </button>
+                )
               })}
             </nav>
           </div>
         </motion.header>
       )}
     </AnimatePresence>
-  );
+  )
 }
 
-export default Header;
+export default Header

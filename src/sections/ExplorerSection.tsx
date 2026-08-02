@@ -1,91 +1,105 @@
-import { useRef, useState, useMemo } from 'react'
-import { motion, useInView } from 'framer-motion'
-import { cognates, type CognateEntry } from '../data/cognates'
+import { useState, useMemo, useEffect, useRef } from 'react'
+import FadeIn from '../components/ui/FadeIn'
+import SectionHeading from '../components/ui/SectionHeading'
+import { VizCard, SectionDivider } from '../components/ui/VizCard'
+import PIEForm from '../components/ui/PIEForm'
+import { cognates } from '../data/cognates'
+import type { CognateEntry } from '../data/cognates'
 
-function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: '-100px' })
-  return (
-    <motion.div
-      ref={ref}
-      initial={{ opacity: 0, y: 40 }}
-      animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 40 }}
-      transition={{ duration: 0.7, delay, ease: 'easeOut' }}
-    >
-      {children}
-    </motion.div>
-  )
+const SUGGESTIONS = [
+  'mother', 'water', 'sun', 'fire', 'three', 'horse',
+  'door', 'know', 'eat', 'stand', 'moon', 'foot',
+]
+
+/** Reads the shared-link query, which is a real query string, not a hash fragment. */
+function readQueryFromUrl(): string {
+  if (typeof window === 'undefined') return ''
+  const fromSearch = new URLSearchParams(window.location.search).get('q')
+  if (fromSearch) return fromSearch
+  // Tolerate links produced by the earlier "#explorer?q=" format.
+  const legacy = window.location.hash.match(/[?&]q=([^&]+)/)
+  return legacy ? decodeURIComponent(legacy[1]) : ''
 }
 
 function CognateSearchResult({ entry, query }: { entry: CognateEntry; query: string }) {
   const languages = Object.entries(entry.forms)
   const [copied, setCopied] = useState(false)
+  const resetTimer = useRef<number | undefined>(undefined)
 
-  const handleShare = () => {
-    const url = `${window.location.origin}${window.location.pathname}#explorer?q=${encodeURIComponent(query)}`
-    navigator.clipboard.writeText(url).then(() => {
+  useEffect(() => () => window.clearTimeout(resetTimer.current), [])
+
+  const handleShare = async () => {
+    const url = `${window.location.origin}${window.location.pathname}?q=${encodeURIComponent(query)}#explorer`
+    try {
+      await navigator.clipboard.writeText(url)
       setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
+      resetTimer.current = window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard access can be denied; leave the button in its resting state.
+    }
   }
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      borderRadius: 16,
-      border: '1px solid rgba(200, 169, 110, 0.15)',
-      padding: 'clamp(1.25rem, 2.5vw, 2rem)',
-      marginBottom: '1.5rem',
-    }}>
-      {/* Header: PIE root, meaning, and share button */}
-      <div style={{ marginBottom: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-        <div>
-          <span style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'clamp(1.3rem, 2.5vw, 1.6rem)',
-            fontStyle: 'italic',
-            color: 'var(--ochre-light)',
-            fontWeight: 500,
-          }}>
-            <span style={{ color: 'var(--teal-light)' }}>*</span>
-            {entry.pieRoot.replace(/^\*/, '')}
-          </span>
-          <span style={{
-            marginLeft: '0.75rem',
-            fontFamily: 'var(--font-body)',
-            fontSize: '1rem',
-            color: 'var(--text-on-dark-secondary)',
-          }}>
+    <article
+      style={{
+        background: 'var(--bg-card)',
+        borderRadius: 16,
+        border: '1px solid var(--card-border)',
+        padding: 'clamp(1.25rem, 2.5vw, 2rem)',
+        marginBottom: '1.5rem',
+      }}
+    >
+      <div
+        style={{
+          marginBottom: '1.25rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+        }}
+      >
+        <h4 style={{ margin: 0, fontWeight: 500 }}>
+          <PIEForm
+            root={entry.pieRoot}
+            style={{ fontSize: 'clamp(1.3rem, 2.5vw, 1.6rem)' }}
+          />
+          <span
+            style={{
+              marginLeft: '0.75rem',
+              fontFamily: 'var(--font-body)',
+              fontSize: '1rem',
+              color: 'var(--text-on-dark-secondary)',
+            }}
+          >
             "{entry.meaning}"
           </span>
-        </div>
+        </h4>
         <button
           onClick={handleShare}
           style={{
-            background: copied ? 'rgba(39, 174, 96, 0.15)' : 'rgba(13, 115, 119, 0.1)',
-            border: `1px solid ${copied ? 'rgba(39, 174, 96, 0.3)' : 'rgba(13, 115, 119, 0.25)'}`,
+            background: copied ? 'rgba(95, 143, 95, 0.15)' : 'rgba(13, 115, 119, 0.1)',
+            border: `1px solid ${copied ? 'rgba(95, 143, 95, 0.35)' : 'rgba(13, 115, 119, 0.25)'}`,
             borderRadius: 6,
-            color: copied ? '#27AE60' : 'var(--teal-light)',
+            color: copied ? '#7EA97E' : 'var(--teal-light)',
             cursor: 'pointer',
-            padding: '0.3rem 0.7rem',
+            padding: '0.4rem 0.8rem',
             fontSize: '0.75rem',
             fontFamily: 'var(--font-body)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '0.35rem',
-            transition: 'all 0.2s ease',
           }}
         >
-          {copied ? 'Copied!' : 'Share'}
+          {copied ? 'Link copied' : 'Copy link'}
         </button>
       </div>
 
-      {/* Language forms grid */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-        gap: '0.75rem',
-      }}>
+      <dl
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+          gap: '0.75rem',
+          margin: 0,
+        }}
+      >
         {languages.map(([lang, form]) => (
           <div
             key={lang}
@@ -93,78 +107,100 @@ function CognateSearchResult({ entry, query }: { entry: CognateEntry; query: str
               background: 'var(--bg-elevated)',
               borderRadius: 10,
               padding: '0.75rem 1rem',
-              border: '1px solid rgba(200, 169, 110, 0.08)',
+              border: '1px solid var(--card-border-subtle)',
             }}
           >
-            <div style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.7rem',
-              color: 'var(--ochre)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.15em',
-              marginBottom: '0.3rem',
-            }}>
+            <dt
+              style={{
+                fontFamily: 'var(--font-body)',
+                fontSize: '0.7rem',
+                color: 'var(--ochre)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.15em',
+                marginBottom: '0.3rem',
+              }}
+            >
               {lang}
-            </div>
-            <div style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '1.05rem',
-              color: 'var(--text-on-dark)',
-              fontStyle: 'italic',
-            }}>
+            </dt>
+            <dd
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: '1.05rem',
+                color: 'var(--text-on-dark)',
+                fontStyle: 'italic',
+                margin: 0,
+              }}
+            >
               {form}
-            </div>
+            </dd>
           </div>
         ))}
-      </div>
+      </dl>
 
-      {/* Sound notes */}
       {entry.soundNotes && (
-        <p style={{
-          marginTop: '1rem',
-          fontSize: '0.875rem',
-          color: 'var(--text-on-dark-muted)',
-          lineHeight: 1.6,
-          maxWidth: '65ch',
-          marginBottom: 0,
-        }}>
+        <p
+          style={{
+            marginTop: '1rem',
+            fontSize: '0.875rem',
+            color: 'var(--text-on-dark-muted)',
+            lineHeight: 1.6,
+            maxWidth: '65ch',
+            marginBottom: 0,
+          }}
+        >
           {entry.soundNotes}
         </p>
       )}
-    </div>
+    </article>
   )
 }
 
 function CognateSearch() {
-  const [query, setQuery] = useState(() => {
-    // Read query from URL hash (e.g. #explorer?q=father)
-    const hash = window.location.hash
-    const match = hash.match(/[?&]q=([^&]+)/)
-    return match ? decodeURIComponent(match[1]) : ''
-  })
+  const [query, setQuery] = useState(readQueryFromUrl)
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return []
-
     return cognates.filter(entry => {
       if (entry.meaning.toLowerCase().includes(q)) return true
       if (entry.pieRoot.toLowerCase().includes(q)) return true
-      return Object.values(entry.forms).some(form =>
-        form.toLowerCase().includes(q)
-      )
+      return Object.values(entry.forms).some(form => form.toLowerCase().includes(q))
     })
   }, [query])
 
+  // A shared link lands on the page with a query already filled in; bring the
+  // reader to the results rather than leaving them at the top of the page.
+  useEffect(() => {
+    if (!readQueryFromUrl()) return
+    const target = document.getElementById('explorer')
+    if (!target) return
+    const timer = window.setTimeout(() => {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [])
+
   return (
     <div>
-      {/* Search input */}
+      <label
+        htmlFor="cognate-search"
+        style={{
+          display: 'block',
+          fontFamily: 'var(--font-body)',
+          fontSize: '0.8rem',
+          color: 'var(--text-on-dark-secondary)',
+          marginBottom: '0.5rem',
+        }}
+      >
+        Search by English meaning, PIE root, or any attested form
+      </label>
       <div style={{ position: 'relative', marginBottom: '2rem' }}>
         <input
-          type="text"
+          id="cognate-search"
+          type="search"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder='Search for a word (e.g. "sun", "fire", "door", "know")'
+          placeholder='e.g. "sun", "fire", "door", "know"'
           style={{
             width: '100%',
             padding: '1rem 1.25rem 1rem 3rem',
@@ -172,21 +208,10 @@ function CognateSearch() {
             fontSize: '1.1rem',
             color: 'var(--text-on-dark)',
             background: 'var(--bg-elevated)',
-            border: '1px solid rgba(200, 169, 110, 0.2)',
+            border: '1px solid var(--card-border)',
             borderRadius: 12,
-            outline: 'none',
-            transition: 'border-color 0.2s, box-shadow 0.2s',
-          }}
-          onFocus={e => {
-            e.currentTarget.style.borderColor = 'var(--teal)'
-            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(13, 115, 119, 0.15)'
-          }}
-          onBlur={e => {
-            e.currentTarget.style.borderColor = 'rgba(200, 169, 110, 0.2)'
-            e.currentTarget.style.boxShadow = 'none'
           }}
         />
-        {/* Search icon */}
         <svg
           width="18"
           height="18"
@@ -196,6 +221,7 @@ function CognateSearch() {
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
+          aria-hidden="true"
           style={{
             position: 'absolute',
             left: '1rem',
@@ -209,16 +235,20 @@ function CognateSearch() {
         </svg>
       </div>
 
-      {/* Results */}
+      <p aria-live="polite" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+        {query.trim() ? `${results.length} matching root${results.length === 1 ? '' : 's'}` : ''}
+      </p>
+
       {query.trim() && results.length === 0 && (
-        <div style={{
-          textAlign: 'center',
-          padding: '2rem',
-          color: 'var(--text-on-dark-muted)',
-          fontFamily: 'var(--font-body)',
-          fontSize: '1rem',
-        }}>
-          No matching cognates found for "{query}". Try words like "father", "sun", "fire", "door", "know", or "eat".
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '2rem',
+            color: 'var(--text-on-dark-muted)',
+            fontFamily: 'var(--font-body)',
+          }}
+        >
+          No matching cognates for "{query}". Try words like "father", "sun", "fire", or "know".
         </div>
       )}
 
@@ -226,35 +256,40 @@ function CognateSearch() {
         <CognateSearchResult key={entry.pieRoot} entry={entry} query={query} />
       ))}
 
-      {/* Hint when empty */}
       {!query.trim() && (
-        <div style={{
-          textAlign: 'center',
-          padding: '2.5rem 1rem',
-          color: 'var(--text-on-dark-muted)',
-          fontFamily: 'var(--font-body)',
-          fontSize: '0.95rem',
-          lineHeight: 1.6,
-        }}>
-          <p style={{ marginBottom: '0.75rem', maxWidth: 'none' }}>
-            Type a word above to search through reconstructed Proto-Indo-European cognates.
-          </p>
-          <p style={{
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '2.5rem 1rem',
             color: 'var(--text-on-dark-muted)',
-            fontSize: '0.85rem',
-            maxWidth: 'none',
-            marginBottom: 0,
-          }}>
-            Try: {[
-              'mother', 'water', 'sun', 'fire', 'three', 'horse',
-              'door', 'know', 'eat', 'stand', 'moon', 'foot',
-            ].map((word, i, arr) => (
-              <span key={word}>
-                <span style={{ color: 'var(--ochre-light)', cursor: 'pointer' }} onClick={() => setQuery(word)}>{word}</span>
-                {i < arr.length - 1 && <>{' '}&middot;{' '}</>}
-              </span>
-            ))}
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.95rem',
+            lineHeight: 1.6,
+          }}
+        >
+          <p style={{ marginBottom: '1rem' }}>
+            Type a word above to search the reconstructed Proto-Indo-European roots.
           </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.4rem' }}>
+            {SUGGESTIONS.map(word => (
+              <button
+                key={word}
+                onClick={() => setQuery(word)}
+                style={{
+                  background: 'rgba(212, 165, 55, 0.08)',
+                  border: '1px solid var(--card-border-subtle)',
+                  borderRadius: 16,
+                  color: 'var(--ochre-light)',
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: '0.85rem',
+                  padding: '0.35rem 0.85rem',
+                }}
+              >
+                {word}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -266,232 +301,39 @@ export default function ExplorerSection() {
     <section
       id="explorer"
       className="section-dark"
-      style={{ padding: '8rem 0 0', position: 'relative' }}
+      style={{ padding: '8rem 0 5rem', position: 'relative' }}
     >
-      {/* Subtle divider */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: '60%',
-        maxWidth: 400,
-        height: 1,
-        background: 'linear-gradient(to right, transparent, var(--bronze), transparent)',
-      }} />
+      <SectionDivider />
 
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 2rem' }}>
-        {/* Section heading */}
         <FadeIn>
-          <div style={{ maxWidth: '65ch', margin: '0 auto 4rem' }}>
-            <span style={{
-              fontFamily: 'var(--font-body)',
-              fontSize: '0.75rem',
-              color: 'var(--ochre)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.2em',
-              display: 'block',
-              marginBottom: '1rem',
-            }}>
-              Section VII
-            </span>
-            <h2 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(2rem, 4vw, 3.5rem)',
-              color: 'var(--text-bright)',
-              fontWeight: 300,
-              marginBottom: '1.5rem',
-              lineHeight: 1.15,
-            }}>
-              Explore the Connections
-            </h2>
-            <p style={{
-              color: 'var(--text-on-dark-secondary)',
-              fontSize: '1.125rem',
-              lineHeight: 1.7,
-            }}>
-              You've traced a story that spans six thousand years, from a reconstructed mother
-              tongue to the living languages of today. Now explore the evidence yourself. Search
-              for any word below to see how it echoes across the Indo-European family, transformed
-              by millennia of sound change yet still recognizably the same.
+          <SectionHeading eyebrow="Section VIII" title="Explore the Connections">
+            <p style={{ fontSize: '1.125rem', lineHeight: 1.7 }}>
+              You've followed a story spanning six thousand years, from a reconstructed mother
+              tongue to the living languages of today. Now explore the evidence directly. Search
+              for a word to see how it echoes across the Indo-European family, reshaped by
+              millennia of sound change yet still recognisable.
             </p>
-          </div>
+          </SectionHeading>
         </FadeIn>
 
-        {/* Interactive cognate search */}
         <FadeIn delay={0.1}>
-          <div style={{
-            padding: 'clamp(1.5rem, 3vw, 2.5rem)',
-            background: 'var(--bg-surface)',
-            borderRadius: 20,
-            border: '1px solid rgba(200, 169, 110, 0.1)',
-            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.15)',
-            marginBottom: '5rem',
-          }}>
-            <h3 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: 'clamp(1.3rem, 2.5vw, 1.8rem)',
-              color: 'var(--text-bright)',
-              fontWeight: 400,
-              marginBottom: '1.5rem',
-            }}>
+          <VizCard>
+            <h3
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'clamp(1.3rem, 2.5vw, 1.8rem)',
+                color: 'var(--text-bright)',
+                fontWeight: 400,
+                marginBottom: '1.5rem',
+              }}
+            >
               Cognate Search
             </h3>
             <CognateSearch />
-          </div>
+          </VizCard>
         </FadeIn>
-
       </div>
-
-      {/* Footer */}
-      <FadeIn delay={0.3}>
-        <footer style={{
-          borderTop: '1px solid rgba(200, 169, 110, 0.1)',
-          padding: '3rem 2rem 2.5rem',
-          marginTop: '2rem',
-        }}>
-          <div style={{
-            maxWidth: 1200,
-            margin: '0 auto',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '1.5rem',
-            textAlign: 'center',
-          }}>
-            <h4 style={{
-              fontFamily: 'var(--font-display)',
-              fontSize: '1.2rem',
-              color: 'var(--text-bright)',
-              fontWeight: 400,
-              marginBottom: 0,
-            }}>
-              The Indo-European Explorer
-            </h4>
-
-            <p style={{
-              color: 'var(--text-on-dark-muted)',
-              fontSize: '0.875rem',
-              lineHeight: 1.6,
-              maxWidth: '55ch',
-              marginBottom: 0,
-            }}>
-              An interactive journey through the history and legacy of the Proto-Indo-European
-              language family. Built with care for accuracy and a love of linguistic history.
-            </p>
-
-            {/* Credits */}
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: '0.25rem 0.5rem',
-              marginTop: '0.5rem',
-            }}>
-              <span style={{
-                color: 'var(--text-on-dark-secondary)',
-                fontSize: '0.8rem',
-                fontFamily: 'var(--font-body)',
-              }}>
-                Created by{' '}
-                <a
-                  href="https://x.com/GordianFra12173"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    color: 'var(--teal-light)',
-                    textDecoration: 'none',
-                    borderBottom: '1px solid rgba(20, 145, 155, 0.3)',
-                  }}
-                >
-                  Sakshyam Patro
-                </a>
-              </span>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: '0.25rem 0.5rem',
-              marginTop: '0.5rem',
-            }}>
-              <span style={{
-                color: 'var(--text-on-dark-muted)',
-                fontSize: '0.75rem',
-                fontFamily: 'var(--font-body)',
-              }}>
-                Inspired by{' '}
-                <a href="https://ncase.me" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ochre-light)', textDecoration: 'none' }}>Nicky Case</a>,{' '}
-                <a href="https://explorabl.es" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ochre-light)', textDecoration: 'none' }}>Explorable Explanations</a>, and{' '}
-                <a href="https://reich.hms.harvard.edu" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ochre-light)', textDecoration: 'none' }}>David Reich's lab</a>
-              </span>
-            </div>
-
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              gap: '0.5rem 1.5rem',
-              marginTop: '0.5rem',
-            }}>
-              <span style={{ color: 'var(--text-on-dark-muted)', fontSize: '0.8rem' }}>
-                References:
-              </span>
-              {[
-                'Anthony, D.W., The Horse, the Wheel, and Language (2007)',
-                'Mallory, J.P., In Search of the Indo-Europeans (1989)',
-                'Fortson, B.W., Indo-European Language and Culture (2010)',
-                'Haak et al., Massive migration from the steppe (Nature, 2015)',
-                'Reich, D., Who We Are and How We Got Here (2018)',
-                'Lazaridis et al., The genetic history of the Southern Arc (Nature, 2022)',
-                'Lazaridis et al., The genetic origin of the Indo-Europeans (Nature, 2025)',
-                'Narasimhan et al., Formation of human populations in South and Central Asia (Science, 2019)',
-                'Zhang et al., Genomic origins of the Bronze Age Tarim Basin mummies (Nature, 2021)',
-                'Olalde et al., The Beaker phenomenon and the genomic transformation of NW Europe (Nature, 2018)',
-                'Heggarty et al., Language trees with sampled ancestors (Science, 2023)',
-                'Librado et al., The origins of domestic horses (Nature, 2021)',
-                'Ringe, D., From Proto-Indo-European to Proto-Germanic (2017)',
-                'Watkins, C., American Heritage Dictionary of IE Roots (2011)',
-              ].map((ref, i) => (
-                <span
-                  key={i}
-                  style={{
-                    color: 'var(--text-on-dark-muted)',
-                    fontSize: '0.75rem',
-                    fontFamily: 'var(--font-body)',
-                  }}
-                >
-                  {ref}
-                </span>
-              ))}
-            </div>
-
-            <p style={{
-              color: 'var(--text-on-dark-muted)',
-              fontSize: '0.75rem',
-              marginTop: '1rem',
-              opacity: 0.8,
-              marginBottom: 0,
-            }}>
-              All reconstructed PIE forms follow standard notation. Asterisk (*) marks unattested reconstructions.
-            </p>
-            <p style={{
-              color: 'var(--text-on-dark-muted)',
-              fontSize: '0.75rem',
-              marginTop: '0.75rem',
-              opacity: 0.8,
-              marginBottom: 0,
-              maxWidth: '60ch',
-              marginLeft: 'auto',
-              marginRight: 'auto',
-              lineHeight: 1.5,
-            }}>
-              Note: Indo-European studies is an active field of research. Migration routes, dates, and genetic findings presented here reflect scholarship as of early 2025 and may be revised as new ancient DNA studies, archaeological discoveries, and linguistic analyses emerge. Areas of particular ongoing debate include the Anatolian branch route, the Tocharian-Afanasievo connection, and precise chronologies for many cultures.
-            </p>
-          </div>
-        </footer>
-      </FadeIn>
     </section>
   )
 }

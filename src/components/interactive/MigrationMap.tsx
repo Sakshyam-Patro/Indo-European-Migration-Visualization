@@ -1,16 +1,47 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { motion } from 'framer-motion'
-import { cultures, type Culture } from '../../data/cultures'
-import { migrations } from '../../data/migrations'
-import InteractiveLabel from '../ui/InteractiveLabel'
-import { territories } from '../../data/territories'
-
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+
+import { cultures, type Culture } from '../../data/cultures'
+import { migrations, type MigrationRoute } from '../../data/migrations'
+import { territories } from '../../data/territories'
+import { brand, vizPalette, withAlpha } from '../../theme'
+import useReducedMotion from '../../hooks/useReducedMotion'
+import VizHeading from '../ui/VizHeading'
+import Legend from '../ui/Legend'
+import type { LegendItem } from '../ui/Legend'
 
 const MIN_DATE = -4500
 const MAX_DATE = -800
 const ANIM_SPEED = 100 // years per second
+const MAP_MIN_ZOOM = 2
+const MAP_MAX_ZOOM = 7
+
+/** Cultures created by a migration only appear once that route is this far along. */
+const MIGRATION_ARRIVAL_PROGRESS = 0.7
+
+/** Below this the layout switches to the stacked/compact treatment. */
+const MOBILE_QUERY = '(max-width: 768px)'
+
+/** Parchment tone shown behind the tiles while they load. */
+const MAP_BACKDROP = '#E8E0D0'
+
+/**
+ * CARTO's basemaps are rendered from OpenStreetMap data, so their terms require
+ * crediting OSM contributors (ODbL) alongside CARTO itself.
+ */
+const TILE_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (ODbL) &middot; ' +
+  '&copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
 
 function dateToLabel(date: number): string {
   return `${Math.abs(date)} BCE`
@@ -98,7 +129,7 @@ const LABEL_OFFSETS: Record<string, [number, number]> = {
 /**
  * Maps culture IDs to the migration route that "created" them.
  * These cultures only appear on the map once the relevant migration
- * has reached ≥70% progress, rather than purely by date range.
+ * has reached MIGRATION_ARRIVAL_PROGRESS, rather than purely by date range.
  * Cultures NOT in this map are "origin" cultures that appear by date alone.
  */
 const CULTURE_MIGRATION_DEPENDENCY: Record<string, string> = {
@@ -107,18 +138,6 @@ const CULTURE_MIGRATION_DEPENDENCY: Record<string, string> = {
   'sintashta': 'corded-ware-sintashta',
   'andronovo': 'sintashta-andronovo',
   'mycenaean': 'greek-migration',
-}
-
-interface CulturePopupData {
-  culture: Culture
-  x: number
-  y: number
-}
-
-interface BranchPopupData {
-  migration: (typeof migrations)[number]
-  x: number
-  y: number
 }
 
 // Origin point for all migrations
@@ -130,7 +149,19 @@ const GENETIC_LABELS: Record<string, string> = {
   CHG: 'Caucasus Hunter-Gatherer',
   EEF: 'Early European Farmer',
   Steppe: 'Yamnaya-related Steppe',
+  Other: 'Other regional ancestry',
 }
+
+/** One ancestry component, one palette slot — shared by the bar and its key. */
+const GENETIC_COLORS: Record<string, string> = {
+  WHG: vizPalette[5],
+  EHG: vizPalette[1],
+  CHG: vizPalette[4],
+  EEF: vizPalette[3],
+  Steppe: vizPalette[0],
+  Other: vizPalette[2],
+}
+const GENETIC_FALLBACK = vizPalette[7]
 
 const SPEED_OPTIONS = [
   { label: '0.5x', value: 50 },
@@ -138,83 +169,260 @@ const SPEED_OPTIONS = [
   { label: '2x', value: 200 },
 ]
 
+/** Inline treatment for <kbd> keys named in the intro copy. */
+const keyStyle = {
+  padding: '0.05em 0.4em',
+  borderRadius: 4,
+  border: `1px solid ${withAlpha(brand.ochreLight, 0.3)}`,
+  background: withAlpha(brand.ochreLight, 0.1),
+  color: 'var(--text-bright)',
+  fontFamily: 'var(--font-body)',
+  fontSize: '0.85em',
+}
+
+/**
+ * Single definition of "which cultures are on the map right now".
+ * Both the Leaflet layers and the legend read from this, so the
+ * migration-dependency rule can never drift between the two.
+ */
+function getVisibleCultures(date: number): Culture[] {
+  return cultures.filter(culture => {
+    if (culture.startDate > date || culture.endDate < date) return false
+    const depMigrationId = CULTURE_MIGRATION_DEPENDENCY[culture.id]
+    if (!depMigrationId) return true // origin culture, show by date
+    const depMigration = migrations.find(m => m.id === depMigrationId)
+    if (!depMigration) return true
+    if (depMigration.startDate > date) return false
+    const span = depMigration.endDate - depMigration.startDate
+    if (span <= 0) return true
+    return (date - depMigration.startDate) / span >= MIGRATION_ARRIVAL_PROGRESS
+  })
+}
+
+/** Territories fade in at the start of a culture's span and out at the end. */
+function getCultureOpacity(culture: Culture, date: number): number {
+  const totalSpan = culture.endDate - culture.startDate
+  const fadeWindow = Math.min(totalSpan * 0.15, 200)
+  let opacity = 1
+  if (fadeWindow > 0) {
+    const elapsed = date - culture.startDate
+    const remaining = culture.endDate - date
+    if (elapsed < fadeWindow) opacity = elapsed / fadeWindow
+    if (remaining < fadeWindow) opacity = Math.min(opacity, remaining / fadeWindow)
+  }
+  return Math.max(0.1, Math.min(1, opacity))
+}
+
+function routeLabel(migration: MigrationRoute): string {
+  return (SHORT_LABELS[migration.id] || migration.branch || migration.name).replace('\n', ' / ')
+}
+
+function cultureLabel(culture: Culture): string {
+  return culture.name.split('(')[0].trim()
+}
+
+function toggleLayer(group: L.LayerGroup, layer: L.Layer, visible: boolean): void {
+  const present = group.hasLayer(layer)
+  if (visible && !present) group.addLayer(layer)
+  else if (!visible && present) group.removeLayer(layer)
+}
+
+/** Rotate an arrow marker without rebuilding its divIcon HTML. */
+function setArrowAngle(marker: L.Marker, angle: number): void {
+  const svg = marker.getElement()?.firstElementChild
+  if (svg instanceof SVGElement) svg.style.transform = `rotate(${angle}deg)`
+}
+
+/**
+ * Makes a Leaflet vector layer focusable and operable from the keyboard.
+ * Leaflet routes DOM keydown from a focused path back to the layer, so the
+ * same element serves mouse, touch and keyboard users.
+ *
+ * The attributes are re-applied on every `add` because the SVG renderer builds
+ * a fresh <path> element each time a layer rejoins the map.
+ */
+function makeKeyboardOperable(
+  layer: L.Path,
+  label: string,
+  activate: () => void,
+  setHighlight: (on: boolean) => void
+): void {
+  const applyAttributes = () => {
+    const el = layer.getElement()
+    if (!el) return
+    el.setAttribute('tabindex', '0')
+    el.setAttribute('role', 'button')
+    el.setAttribute('aria-label', label)
+    el.addEventListener('focus', () => setHighlight(true))
+    el.addEventListener('blur', () => setHighlight(false))
+  }
+  layer.on('add', applyAttributes)
+  layer.on('keydown', (event: L.LeafletKeyboardEvent) => {
+    const key = event.originalEvent.key
+    if (key !== 'Enter' && key !== ' ' && key !== 'Spacebar') return
+    event.originalEvent.preventDefault()
+    event.originalEvent.stopPropagation()
+    activate()
+  })
+  applyAttributes()
+}
+
+/** Everything Leaflet needs for one migration route, built once and reused. */
+interface RouteHandles {
+  migration: MigrationRoute
+  shadow: L.Polyline
+  outline: L.Polyline
+  line: L.Polyline
+  hitArea: L.Polyline
+  tipArrow: L.Marker
+  endArrow: L.Marker
+  branchLabel: L.Marker | null
+  visible: boolean
+  /** Last progress committed to the geometry; -1 forces the next update through. */
+  renderedProgress: number
+  renderedMode: 'active' | 'complete' | null
+}
+
+/** Everything Leaflet needs for one archaeological culture, built once. */
+interface CultureHandles {
+  culture: Culture
+  territory: L.Polygon | null
+  label: L.Marker
+  marker: L.CircleMarker
+  visible: boolean
+  renderedOpacity: number
+}
+
+function subscribeToViewport(onStoreChange: () => void): () => void {
+  if (typeof window === 'undefined' || !window.matchMedia) return () => {}
+  const mql = window.matchMedia(MOBILE_QUERY)
+  mql.addEventListener('change', onStoreChange)
+  return () => mql.removeEventListener('change', onStoreChange)
+}
+
+function getViewportSnapshot(): boolean {
+  if (typeof window === 'undefined' || !window.matchMedia) return false
+  return window.matchMedia(MOBILE_QUERY).matches
+}
+
+/**
+ * Narrow-viewport flag driven by matchMedia, so it tracks resizes and
+ * orientation changes instead of freezing at the first render's innerWidth.
+ */
+function useIsMobile(): boolean {
+  return useSyncExternalStore(subscribeToViewport, getViewportSnapshot, () => false)
+}
+
 export default function MigrationMap() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
+  const controlsRef = useRef<HTMLDivElement>(null)
+
   const [currentDate, setCurrentDate] = useState(MIN_DATE)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [selectedCulture, setSelectedCulture] = useState<CulturePopupData | null>(null)
-  const [selectedBranch, setSelectedBranch] = useState<BranchPopupData | null>(null)
-  const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 768)
+  const [selectedCulture, setSelectedCulture] = useState<Culture | null>(null)
+  const [selectedBranch, setSelectedBranch] = useState<MigrationRoute | null>(null)
+  const [legendOverride, setLegendOverride] = useState<boolean | null>(null)
   const [hasInteracted, setHasInteracted] = useState(false)
   const [animSpeed, setAnimSpeed] = useState(ANIM_SPEED)
-  const controlsRef = useRef<HTMLDivElement>(null)
+
+  const reducedMotion = useReducedMotion()
+  const isMobile = useIsMobile()
+  const legendPanelId = useId()
+  const legendOpen = legendOverride ?? !isMobile
 
   const territoryLayerGroup = useRef<L.LayerGroup | null>(null)
   const routeLayerGroup = useRef<L.LayerGroup | null>(null)
   const markerLayerGroup = useRef<L.LayerGroup | null>(null)
   const labelLayerGroup = useRef<L.LayerGroup | null>(null)
+  const routeHandlesRef = useRef<Map<string, RouteHandles>>(new Map())
+  const cultureHandlesRef = useRef<Map<string, CultureHandles>>(new Map())
   const animationRef = useRef<number | null>(null)
   const dateRef = useRef(currentDate)
+  const reducedMotionRef = useRef(reducedMotion)
+  const cultureCardRef = useRef<HTMLDivElement>(null)
+  const branchCardRef = useRef<HTMLDivElement>(null)
 
-  // Keep the date ref in sync with state for use inside imperative callbacks
+  // Keep refs in sync for use inside imperative callbacks and one-shot listeners
   useEffect(() => {
     dateRef.current = currentDate
   }, [currentDate])
 
-  // Initialize map
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return
+    reducedMotionRef.current = reducedMotion
+  }, [reducedMotion])
 
-    const map = L.map(mapContainerRef.current, {
+  /**
+   * The rAF sweep is gated on the motion preference rather than on `isPlaying`
+   * alone: a reduced-motion visitor never gets an animated timeline, and a
+   * preference that flips mid-run stops the sweep on the next render.
+   */
+  const isAnimating = isPlaying && !reducedMotion
+
+  // ---------------------------------------------------------------------------
+  // Map + layer construction. Every Leaflet object the animation touches is
+  // created exactly once here; the per-frame update below only mutates them.
+  // ---------------------------------------------------------------------------
+  useEffect(() => {
+    const container = mapContainerRef.current
+    if (!container || mapRef.current) return
+
+    const map = L.map(container, {
       center: [42, 45],
       zoom: 3,
-      minZoom: 2,
-      maxZoom: 7,
+      minZoom: MAP_MIN_ZOOM,
+      maxZoom: MAP_MAX_ZOOM,
       zoomControl: false,
       attributionControl: false,
     })
 
-    // Light geographic basemap that shows terrain like the reference images
+    L.control.zoom({ position: 'topright' }).addTo(map)
+    L.control.attribution({ position: 'bottomright', prefix: false }).addTo(map)
+
+    // Muted terrain basemap: enough relief to read the steppe corridor without
+    // place-name labels competing with the migration overlay.
     L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
       subdomains: 'abcd',
-      maxZoom: 19,
+      maxZoom: MAP_MAX_ZOOM,
+      attribution: TILE_ATTRIBUTION,
     }).addTo(map)
 
-    L.control.zoom({ position: 'topright' }).addTo(map)
-    L.control.attribution({ position: 'bottomright', prefix: false })
-      .addAttribution('&copy; <a href="https://carto.com">CARTO</a>')
-      .addTo(map)
-
     // Layer groups: territories (bottom) → routes → markers → labels (top)
-    territoryLayerGroup.current = L.layerGroup().addTo(map)
-    routeLayerGroup.current = L.layerGroup().addTo(map)
-    markerLayerGroup.current = L.layerGroup().addTo(map)
-    labelLayerGroup.current = L.layerGroup().addTo(map)
+    const territoryGroup = L.layerGroup().addTo(map)
+    const routeGroup = L.layerGroup().addTo(map)
+    const markerGroup = L.layerGroup().addTo(map)
+    const labelGroup = L.layerGroup().addTo(map)
+    territoryLayerGroup.current = territoryGroup
+    routeLayerGroup.current = routeGroup
+    markerLayerGroup.current = markerGroup
+    labelLayerGroup.current = labelGroup
 
-    // Homeland marker (always visible), large and prominent
-    const homelandOuter = L.circleMarker(PIE_HOMELAND, {
+    // ---------- HOMELAND (always visible) ----------
+    L.circleMarker(PIE_HOMELAND, {
       radius: 22,
-      fillColor: '#D4A537',
+      fillColor: brand.ochreLight,
       fillOpacity: 0.15,
-      color: '#D4A537',
+      color: brand.ochreLight,
       weight: 2,
       opacity: 0.4,
-    })
-    homelandOuter.addTo(map)
+      interactive: false,
+    }).addTo(map)
 
-    const homeland = L.circleMarker(PIE_HOMELAND, {
+    L.circleMarker(PIE_HOMELAND, {
       radius: 10,
-      fillColor: '#D4A537',
+      fillColor: brand.ochreLight,
       fillOpacity: 0.9,
       color: '#fff',
       weight: 2.5,
       opacity: 0.9,
-    })
-    homeland.addTo(map)
+      interactive: false,
+    }).addTo(map)
 
-    // Permanent homeland label
-    const homelandLabel = L.marker(PIE_HOMELAND, {
+    L.marker(PIE_HOMELAND, {
+      // Leaflet stamps tabindex="0" + role="button" on every marker icon unless
+      // `keyboard` is off, which would put unnamed tab stops between the routes
+      // and cultures that actually carry the map's information.
+      keyboard: false,
       icon: L.divIcon({
         className: '',
         iconSize: [140, 40],
@@ -224,89 +432,45 @@ export default function MigrationMap() {
           font-family: 'Source Sans 3', sans-serif;
           font-size: 11px;
           font-weight: 700;
-          color: #8B6914;
+          color: ${brand.ochreDark};
           text-shadow: 0 0 4px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.7);
           white-space: nowrap;
           letter-spacing: 0.05em;
         ">PIE HOMELAND</div>`,
       }),
       interactive: false,
-    })
-    homelandLabel.addTo(map)
+    }).addTo(map)
 
-    mapRef.current = map
-
-    return () => {
-      map.remove()
-      mapRef.current = null
-      territoryLayerGroup.current = null
-      routeLayerGroup.current = null
-      markerLayerGroup.current = null
-      labelLayerGroup.current = null
-    }
-  }, [])
-
-  // Core layer update
-  const updateLayers = useCallback((date: number) => {
-    const map = mapRef.current
-    if (!map || !territoryLayerGroup.current || !routeLayerGroup.current || !markerLayerGroup.current || !labelLayerGroup.current) return
-
-    territoryLayerGroup.current.clearLayers()
-    routeLayerGroup.current.clearLayers()
-    markerLayerGroup.current.clearLayers()
-    labelLayerGroup.current.clearLayers()
-
-    // ---------- TERRITORY POLYGONS (large, bold, visible) ----------
-    // Cultures with a migration dependency only appear once that migration
-    // has reached ≥70% progress, not purely by their date range.
-    const visibleCultures = cultures.filter(c => {
-      if (c.startDate > date || c.endDate < date) return false
-      const depMigrationId = CULTURE_MIGRATION_DEPENDENCY[c.id]
-      if (!depMigrationId) return true // origin culture, show by date
-      const depMigration = migrations.find(m => m.id === depMigrationId)
-      if (!depMigration) return true
-      if (depMigration.startDate > date) return false
-      const progress = (date - depMigration.startDate) / (depMigration.endDate - depMigration.startDate)
-      return progress >= 0.7
-    })
-    visibleCultures.forEach(culture => {
+    // ---------- TERRITORIES + CULTURE MARKERS ----------
+    const cultureHandles = new Map<string, CultureHandles>()
+    cultures.forEach(culture => {
       const polyCoords = territories[culture.id]
-      if (!polyCoords) return
+      let territory: L.Polygon | null = null
+      if (polyCoords) {
+        territory = L.polygon(polyCoords, {
+          fillColor: culture.color,
+          fillOpacity: 0.3,
+          color: culture.color,
+          weight: 2.5,
+          opacity: 0.6,
+          interactive: false,
+        })
+        // Territories always sit under the routes, even when they appear later.
+        territory.on('add', () => territory?.bringToBack())
+      }
 
-      // Fade in/out
-      const totalSpan = culture.endDate - culture.startDate
-      const elapsed = date - culture.startDate
-      const remaining = culture.endDate - date
-      const fadeWindow = Math.min(totalSpan * 0.15, 200)
-      let opacity = 1
-      if (elapsed < fadeWindow) opacity = elapsed / fadeWindow
-      if (remaining < fadeWindow) opacity = Math.min(opacity, remaining / fadeWindow)
-      opacity = Math.max(0.1, Math.min(1, opacity))
-
-      // Bold territory shading, highly visible like reference images
-      const poly = L.polygon(polyCoords as L.LatLngExpression[], {
-        fillColor: culture.color,
-        fillOpacity: 0.3 * opacity,
-        color: culture.color,
-        weight: 2.5,
-        opacity: 0.6 * opacity,
-      })
-      territoryLayerGroup.current!.addLayer(poly)
-
-      // Culture name + date label on territory
-      const center = culture.center
-      const shortName = culture.name.split('(')[0].trim()
-      const dateRange = `${dateToShort(culture.startDate)}\u2013${dateToShort(culture.endDate)} BCE`
-      const nameLabel = L.marker(center, {
+      const dateRange = `${dateToShort(culture.startDate)}–${dateToShort(culture.endDate)} BCE`
+      const label = L.marker(culture.center, {
+        // Decorative twin of the focusable culture marker below: keep it out of
+        // the tab order (see the homeland label for why `keyboard` matters).
+        keyboard: false,
         icon: L.divIcon({
           className: '',
           iconSize: [160, 42],
           iconAnchor: [80, 21],
-          html: `<div style="
-            text-align: center;
-            white-space: nowrap;
-            opacity: ${Math.min(1, opacity * 1.5)};
-          ">
+          // Hidden from assistive tech: the focusable culture marker below
+          // carries the same name and dates in one announcement.
+          html: `<div aria-hidden="true" style="text-align: center; white-space: nowrap;">
             <div style="
               font-family: 'Source Sans 3', sans-serif;
               font-size: 12px;
@@ -314,204 +478,19 @@ export default function MigrationMap() {
               color: ${culture.color};
               text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8), 0 0 12px rgba(255,255,255,0.6);
               letter-spacing: 0.03em;
-            ">${shortName}</div>
+            ">${cultureLabel(culture)}</div>
             <div style="
               font-family: 'Source Sans 3', sans-serif;
               font-size: 10px;
               font-weight: 600;
-              color: #555;
+              color: ${brand.textOnLightSecondary};
               text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8);
             ">${dateRange}</div>
           </div>`,
         }),
         interactive: false,
       })
-      markerLayerGroup.current!.addLayer(nameLabel)
-    })
 
-    // ---------- MIGRATION ROUTES (thick, bold arrows) ----------
-    migrations.forEach(migration => {
-      if (migration.startDate > date) return
-
-      const totalDuration = migration.endDate - migration.startDate
-      const elapsed = date - migration.startDate
-      const rawProgress = elapsed / totalDuration
-      const isComplete = rawProgress >= 1
-      const progress = Math.max(0, Math.min(1, rawProgress))
-
-      const fullPath = migration.path
-      const visiblePath = isComplete
-        ? fullPath
-        : getPartialPath(fullPath, progress)
-
-      if (visiblePath.length < 2) return
-
-      // Outer glow / shadow (very wide, subtle)
-      const shadow = L.polyline(visiblePath as L.LatLngExpression[], {
-        color: migration.color,
-        weight: isComplete ? 12 : 14,
-        opacity: isComplete ? 0.1 : 0.15,
-        lineCap: 'round',
-        lineJoin: 'round',
-      })
-      routeLayerGroup.current!.addLayer(shadow)
-
-      // Main route line, THICK and bold
-      if (isComplete) {
-        const line = L.polyline(visiblePath as L.LatLngExpression[], {
-          color: migration.color,
-          weight: 5,
-          opacity: 0.7,
-          lineCap: 'round',
-          lineJoin: 'round',
-        })
-        routeLayerGroup.current!.addLayer(line)
-      } else {
-        // Active: solid thick line (not dashed, cleaner look)
-        const line = L.polyline(visiblePath as L.LatLngExpression[], {
-          color: migration.color,
-          weight: 5.5,
-          opacity: 0.85,
-          lineCap: 'round',
-          lineJoin: 'round',
-        })
-        routeLayerGroup.current!.addLayer(line)
-      }
-
-      // Dark outline for contrast on light map
-      const outline = L.polyline(visiblePath as L.LatLngExpression[], {
-        color: '#000',
-        weight: 7,
-        opacity: 0.08,
-        lineCap: 'round',
-        lineJoin: 'round',
-      })
-      routeLayerGroup.current!.addLayer(outline)
-      // Bring main route above outline
-      outline.bringToBack()
-
-      // Clickable hit area (transparent, wider than visible line)
-      const hitArea = L.polyline(visiblePath as L.LatLngExpression[], {
-        color: 'transparent',
-        weight: 20,
-        opacity: 0,
-        interactive: true,
-      })
-      hitArea.on('mouseover', () => {
-        hitArea.setStyle({ color: migration.color, opacity: 0.15, weight: 20 })
-        map.getContainer().style.cursor = 'pointer'
-      })
-      hitArea.on('mouseout', () => {
-        hitArea.setStyle({ color: 'transparent', opacity: 0 })
-        map.getContainer().style.cursor = ''
-      })
-      hitArea.on('click', (e: L.LeafletMouseEvent) => {
-        L.DomEvent.stopPropagation(e)
-        const point = map.latLngToContainerPoint(e.latlng)
-        setSelectedBranch({ migration, x: point.x, y: point.y })
-        setSelectedCulture(null)
-      })
-      routeLayerGroup.current!.addLayer(hitArea)
-      hitArea.bringToFront()
-
-      // Large arrowhead at leading edge
-      if (!isComplete && visiblePath.length >= 2) {
-        const tip = visiblePath[visiblePath.length - 1]
-        const angle = getTipAngle(visiblePath)
-
-        // Big SVG arrowhead
-        const arrowIcon = L.divIcon({
-          className: '',
-          iconSize: [28, 28],
-          iconAnchor: [14, 14],
-          html: `<svg width="28" height="28" viewBox="0 0 28 28" style="transform: rotate(${angle}deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3))">
-            <polygon points="14,2 5,24 14,18 23,24" fill="${migration.color}" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/>
-          </svg>`,
-        })
-        const arrowMarker = L.marker(tip as L.LatLngExpression, { icon: arrowIcon, interactive: false })
-        markerLayerGroup.current!.addLayer(arrowMarker)
-      }
-
-      // Endpoint arrowhead + branch label for completed routes
-      if (isComplete) {
-        const endpoint = fullPath[fullPath.length - 1]
-        const angle = getTipAngle(fullPath)
-
-        // Arrowhead at end
-        const endArrow = L.divIcon({
-          className: '',
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-          html: `<svg width="24" height="24" viewBox="0 0 24 24" style="transform: rotate(${angle}deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2))">
-            <polygon points="12,2 4,20 12,15 20,20" fill="${migration.color}" stroke="#fff" stroke-width="1" stroke-linejoin="round" opacity="0.85"/>
-          </svg>`,
-        })
-        const endArrowMarker = L.marker(endpoint as L.LatLngExpression, { icon: endArrow, interactive: false })
-        markerLayerGroup.current!.addLayer(endArrowMarker)
-
-        // Branch name label at endpoint (pill-shaped background)
-        const label = SHORT_LABELS[migration.id] || migration.branch || ''
-        if (label) {
-          const offset = LABEL_OFFSETS[migration.id] || [0, 0]
-          const labelPos: [number, number] = [
-            endpoint[0] + offset[0],
-            endpoint[1] + offset[1],
-          ]
-          const displayLabel = label.replace('\n', ' / ')
-          const dateStr = `~${Math.abs(migration.endDate)} BCE`
-
-          const branchLabel = L.marker(
-            labelPos as L.LatLngExpression,
-            {
-              icon: L.divIcon({
-                className: '',
-                iconSize: [140, 44],
-                iconAnchor: [70, 22],
-                html: `<div style="
-                  text-align: center;
-                  white-space: nowrap;
-                  cursor: pointer;
-                ">
-                  <div style="
-                    display: inline-block;
-                    padding: 4px 12px;
-                    background: ${migration.color}dd;
-                    color: #fff;
-                    font-family: 'Source Sans 3', sans-serif;
-                    font-size: 12px;
-                    font-weight: 700;
-                    border-radius: 10px;
-                    line-height: 1.3;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-                    letter-spacing: 0.02em;
-                    transition: transform 0.15s, box-shadow 0.15s;
-                  ">${displayLabel}</div>
-                  <div style="
-                    font-family: 'Source Sans 3', sans-serif;
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: #555;
-                    margin-top: 2px;
-                    text-shadow: 0 0 3px rgba(255,255,255,0.9);
-                  ">${dateStr}</div>
-                </div>`,
-              }),
-              interactive: true,
-            }
-          )
-          branchLabel.on('click', (e: L.LeafletMouseEvent) => {
-            L.DomEvent.stopPropagation(e)
-            const point = map.latLngToContainerPoint(e.latlng)
-            setSelectedBranch({ migration, x: point.x, y: point.y })
-            setSelectedCulture(null)
-          })
-          labelLayerGroup.current!.addLayer(branchLabel)
-        }
-      }
-    })
-
-    // ---------- CULTURE CENTER MARKERS ----------
-    visibleCultures.forEach(culture => {
       const marker = L.circleMarker(culture.center, {
         radius: 7,
         fillColor: culture.color,
@@ -520,51 +499,405 @@ export default function MigrationMap() {
         weight: 2,
         opacity: 0.9,
       })
-      marker.on('click', (e) => {
-        L.DomEvent.stopPropagation(e)
-        const point = map.latLngToContainerPoint(e.latlng)
-        setSelectedCulture({ culture, x: point.x, y: point.y })
+      const openCulture = () => {
+        setSelectedCulture(culture)
         setSelectedBranch(null)
+      }
+      marker.on('click', (event: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(event)
+        openCulture()
       })
-      markerLayerGroup.current!.addLayer(marker)
+      marker.on('add', () => marker.bringToFront())
+      makeKeyboardOperable(
+        marker,
+        `${culture.name}, ${dateToLabel(culture.startDate)} to ${dateToLabel(culture.endDate)}. Show details.`,
+        openCulture,
+        on => marker.setStyle({ radius: on ? 10 : 7, weight: on ? 3 : 2 })
+      )
+
+      cultureHandles.set(culture.id, {
+        culture,
+        territory,
+        label,
+        marker,
+        visible: false,
+        renderedOpacity: -1,
+      })
     })
+    cultureHandlesRef.current = cultureHandles
+
+    // ---------- MIGRATION ROUTES ----------
+    const routeHandles = new Map<string, RouteHandles>()
+    migrations.forEach(migration => {
+      const openBranch = () => {
+        setSelectedBranch(migration)
+        setSelectedCulture(null)
+      }
+
+      // Outer glow.
+      const shadow = L.polyline(migration.path, {
+        color: migration.color,
+        weight: 14,
+        opacity: 0.15,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      })
+
+      // Dark outline for contrast on the light basemap.
+      const outline = L.polyline(migration.path, {
+        color: '#000',
+        weight: 7,
+        opacity: 0.08,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      })
+
+      const line = L.polyline(migration.path, {
+        color: migration.color,
+        weight: 5.5,
+        opacity: 0.85,
+        lineCap: 'round',
+        lineJoin: 'round',
+        interactive: false,
+      })
+
+      const hitArea = L.polyline(migration.path, {
+        color: 'transparent',
+        weight: 20,
+        opacity: 0,
+        interactive: true,
+      })
+
+      // Z-order is settled when a layer joins the map, not on every frame:
+      // the dark outline drops behind everything, the hit area rides on top.
+      outline.on('add', () => outline.bringToBack())
+      hitArea.on('add', () => hitArea.bringToFront())
+
+      const setHighlight = (on: boolean) => {
+        hitArea.setStyle(
+          on
+            ? { color: migration.color, opacity: 0.18 }
+            : { color: 'transparent', opacity: 0 }
+        )
+      }
+      hitArea.on('mouseover', () => {
+        setHighlight(true)
+        map.getContainer().style.cursor = 'pointer'
+      })
+      hitArea.on('mouseout', () => {
+        setHighlight(false)
+        map.getContainer().style.cursor = ''
+      })
+      hitArea.on('click', (event: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(event)
+        openBranch()
+      })
+      makeKeyboardOperable(
+        hitArea,
+        `${routeLabel(migration)} migration route, ${dateToLabel(migration.startDate)} to ${dateToLabel(migration.endDate)}. Show details.`,
+        openBranch,
+        setHighlight
+      )
+
+      const arrowSvg = (size: number, points: string, strokeWidth: number, opacity: number) =>
+        `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true" focusable="false" style="transform: rotate(0deg); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3))">
+          <polygon points="${points}" fill="${migration.color}" stroke="#fff" stroke-width="${strokeWidth}" stroke-linejoin="round" opacity="${opacity}"/>
+        </svg>`
+
+      const tipArrow = L.marker(migration.path[0], {
+        // Arrowheads are pure decoration on top of the focusable route path.
+        keyboard: false,
+        icon: L.divIcon({
+          className: '',
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+          html: arrowSvg(28, '14,2 5,24 14,18 23,24', 1.5, 1),
+        }),
+        interactive: false,
+      })
+
+      const endpoint = migration.path[migration.path.length - 1]
+      const endArrow = L.marker(endpoint, {
+        keyboard: false,
+        icon: L.divIcon({
+          className: '',
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
+          html: arrowSvg(24, '12,2 4,20 12,15 20,20', 1, 0.85),
+        }),
+        interactive: false,
+      })
+      endArrow.on('add', () => setArrowAngle(endArrow, getTipAngle(migration.path)))
+
+      // Branch name pill at the endpoint, shown once the route has arrived.
+      let branchLabel: L.Marker | null = null
+      const pillText = SHORT_LABELS[migration.id] || migration.branch || ''
+      if (pillText) {
+        const offset = LABEL_OFFSETS[migration.id] || [0, 0]
+        const labelPos: [number, number] = [endpoint[0] + offset[0], endpoint[1] + offset[1]]
+        branchLabel = L.marker(labelPos, {
+          // The focusable route path already announces this text, so the pill is
+          // a pointer affordance only and stays out of the tab order.
+          keyboard: false,
+          icon: L.divIcon({
+            className: '',
+            iconSize: [140, 44],
+            iconAnchor: [70, 22],
+            html: `<div aria-hidden="true" style="text-align: center; white-space: nowrap; cursor: pointer;">
+              <div style="
+                display: inline-block;
+                padding: 4px 12px;
+                background: ${withAlpha(migration.color, 0.87)};
+                color: #fff;
+                font-family: 'Source Sans 3', sans-serif;
+                font-size: 12px;
+                font-weight: 700;
+                border-radius: 10px;
+                line-height: 1.3;
+                box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+                letter-spacing: 0.02em;
+              ">${pillText.replace('\n', ' / ')}</div>
+              <div style="
+                font-family: 'Source Sans 3', sans-serif;
+                font-size: 10px;
+                font-weight: 700;
+                color: ${brand.textOnLightSecondary};
+                margin-top: 2px;
+                text-shadow: 0 0 3px rgba(255,255,255,0.9);
+              ">~${Math.abs(migration.endDate)} BCE</div>
+            </div>`,
+          }),
+          interactive: true,
+        })
+        branchLabel.on('click', (event: L.LeafletMouseEvent) => {
+          L.DomEvent.stopPropagation(event)
+          openBranch()
+        })
+      }
+
+      routeHandles.set(migration.id, {
+        migration,
+        shadow,
+        outline,
+        line,
+        hitArea,
+        tipArrow,
+        endArrow,
+        branchLabel,
+        visible: false,
+        renderedProgress: -1,
+        renderedMode: null,
+      })
+    })
+    routeHandlesRef.current = routeHandles
+
+    // Dismiss detail cards when the basemap itself is clicked.
+    const clearSelection = () => {
+      setSelectedCulture(null)
+      setSelectedBranch(null)
+    }
+    map.on('click', clearSelection)
+
+    // Leaflet caches the container size, so tell it whenever the box changes —
+    // the section is lazily revealed and the mobile stylesheet resizes it.
+    const resizeObserver = new ResizeObserver(() => {
+      map.invalidateSize({ animate: false })
+    })
+    resizeObserver.observe(container)
+
+    let visibilityObserver: IntersectionObserver | null = null
+    if (typeof IntersectionObserver !== 'undefined') {
+      visibilityObserver = new IntersectionObserver(entries => {
+        if (!entries.some(entry => entry.isIntersecting)) return
+        map.invalidateSize({ animate: false })
+        visibilityObserver?.disconnect()
+        visibilityObserver = null
+      })
+      visibilityObserver.observe(container)
+    }
+
+    mapRef.current = map
+
+    return () => {
+      resizeObserver.disconnect()
+      visibilityObserver?.disconnect()
+      map.off('click', clearSelection)
+      map.remove()
+      mapRef.current = null
+      territoryLayerGroup.current = null
+      routeLayerGroup.current = null
+      markerLayerGroup.current = null
+      labelLayerGroup.current = null
+      routeHandlesRef.current = new Map()
+      cultureHandlesRef.current = new Map()
+    }
   }, [])
 
-  // React state → update layers
-  useEffect(() => {
-    updateLayers(currentDate)
-  }, [currentDate, updateLayers])
+  // ---------------------------------------------------------------------------
+  // Per-frame update. No layer is created or destroyed here: geometry, style and
+  // group membership are mutated in place, and untouched when nothing changed.
+  // ---------------------------------------------------------------------------
+  const updateLayers = useCallback((date: number) => {
+    const territoryGroup = territoryLayerGroup.current
+    const routeGroup = routeLayerGroup.current
+    const markerGroup = markerLayerGroup.current
+    const labelGroup = labelLayerGroup.current
+    if (!territoryGroup || !routeGroup || !markerGroup || !labelGroup) return
 
-  // Keyboard shortcut: spacebar to play/pause
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.code === 'Space' && controlsRef.current) {
-        // Only handle if the map section is in viewport and focus isn't in an input
-        const tag = (e.target as HTMLElement).tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
-        const rect = controlsRef.current.getBoundingClientRect()
-        if (rect.top < window.innerHeight && rect.bottom > 0) {
-          e.preventDefault()
-          setHasInteracted(true)
-          if (currentDate >= MAX_DATE - 50) {
-            setCurrentDate(MIN_DATE)
-            dateRef.current = MIN_DATE
-            updateLayers(MIN_DATE)
-          }
-          setIsPlaying(p => !p)
+    const cultureHandles = cultureHandlesRef.current
+    const routeHandles = routeHandlesRef.current
+
+    // ---------- TERRITORIES + CULTURE MARKERS ----------
+    const visibleIds = new Set(getVisibleCultures(date).map(c => c.id))
+    cultureHandles.forEach((handles, id) => {
+      const visible = visibleIds.has(id)
+      if (visible !== handles.visible) {
+        handles.visible = visible
+        if (handles.territory) toggleLayer(territoryGroup, handles.territory, visible)
+        toggleLayer(markerGroup, handles.label, visible)
+        toggleLayer(markerGroup, handles.marker, visible)
+        if (!visible) handles.renderedOpacity = -1
+      }
+      if (!visible) return
+
+      const opacity = getCultureOpacity(handles.culture, date)
+      if (Math.abs(opacity - handles.renderedOpacity) < 0.01) return
+      handles.renderedOpacity = opacity
+      handles.territory?.setStyle({ fillOpacity: 0.3 * opacity, opacity: 0.6 * opacity })
+      handles.label.setOpacity(Math.min(1, opacity * 1.5))
+    })
+
+    // ---------- MIGRATION ROUTES ----------
+    let routeAppeared = false
+    routeHandles.forEach(handles => {
+      const { migration } = handles
+      const totalDuration = migration.endDate - migration.startDate
+      const rawProgress = totalDuration > 0 ? (date - migration.startDate) / totalDuration : 1
+      const isComplete = rawProgress >= 1
+      const progress = Math.max(0, Math.min(1, rawProgress))
+      const visiblePath = isComplete ? migration.path : getPartialPath(migration.path, progress)
+      const shouldShow = migration.startDate <= date && visiblePath.length >= 2
+
+      if (shouldShow !== handles.visible) {
+        handles.visible = shouldShow
+        toggleLayer(routeGroup, handles.shadow, shouldShow)
+        toggleLayer(routeGroup, handles.outline, shouldShow)
+        toggleLayer(routeGroup, handles.line, shouldShow)
+        toggleLayer(routeGroup, handles.hitArea, shouldShow)
+        if (shouldShow) {
+          routeAppeared = true
+        } else {
+          toggleLayer(markerGroup, handles.tipArrow, false)
+          toggleLayer(markerGroup, handles.endArrow, false)
+          if (handles.branchLabel) toggleLayer(labelGroup, handles.branchLabel, false)
+          handles.renderedProgress = -1
+          handles.renderedMode = null
         }
       }
+      if (!shouldShow) return
+
+      const mode: 'active' | 'complete' = isComplete ? 'complete' : 'active'
+      if (mode !== handles.renderedMode) {
+        handles.renderedMode = mode
+        handles.renderedProgress = -1
+        handles.shadow.setStyle(
+          mode === 'complete' ? { weight: 12, opacity: 0.1 } : { weight: 14, opacity: 0.15 }
+        )
+        handles.line.setStyle(
+          mode === 'complete' ? { weight: 5, opacity: 0.7 } : { weight: 5.5, opacity: 0.85 }
+        )
+        toggleLayer(markerGroup, handles.tipArrow, mode === 'active')
+        toggleLayer(markerGroup, handles.endArrow, mode === 'complete')
+        if (handles.branchLabel) {
+          toggleLayer(labelGroup, handles.branchLabel, mode === 'complete')
+        }
+      }
+
+      if (mode === 'complete') {
+        if (handles.renderedProgress !== 1) {
+          handles.renderedProgress = 1
+          handles.shadow.setLatLngs(migration.path)
+          handles.outline.setLatLngs(migration.path)
+          handles.line.setLatLngs(migration.path)
+          handles.hitArea.setLatLngs(migration.path)
+        }
+        return
+      }
+
+      // Sub-pixel geometry churn is invisible; skip it.
+      if (Math.abs(progress - handles.renderedProgress) < 0.0015) return
+      handles.renderedProgress = progress
+      handles.shadow.setLatLngs(visiblePath)
+      handles.outline.setLatLngs(visiblePath)
+      handles.line.setLatLngs(visiblePath)
+      handles.hitArea.setLatLngs(visiblePath)
+      handles.tipArrow.setLatLng(visiblePath[visiblePath.length - 1])
+      setArrowAngle(handles.tipArrow, getTipAngle(visiblePath))
+    })
+
+    // A route that just joined the map sits above the culture dots; restore the
+    // dots on the handful of frames where that actually happens.
+    if (routeAppeared) {
+      cultureHandles.forEach(handles => {
+        if (handles.visible) handles.marker.bringToFront()
+      })
+    }
+  }, [])
+
+  const jumpTo = useCallback((date: number) => {
+    dateRef.current = date
+    setCurrentDate(date)
+    updateLayers(date)
+  }, [updateLayers])
+
+  // React state → layers. While playing, the rAF loop owns the layers, so this
+  // effect stands down instead of repeating the work the loop just did.
+  useEffect(() => {
+    if (isAnimating) return
+    updateLayers(currentDate)
+  }, [currentDate, isAnimating, updateLayers])
+
+  const togglePlay = useCallback(() => {
+    setHasInteracted(true)
+    if (reducedMotionRef.current) {
+      // No animated sweep for reduced motion: jump between the two end states.
+      setIsPlaying(false)
+      jumpTo(dateRef.current >= MAX_DATE - 50 ? MIN_DATE : MAX_DATE)
+      return
+    }
+    if (dateRef.current >= MAX_DATE - 50) jumpTo(MIN_DATE)
+    setIsPlaying(playing => !playing)
+  }, [jumpTo])
+
+  // Spacebar toggles playback. Bound once — the handler reads live values from
+  // refs rather than closing over state.
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.code !== 'Space') return
+      const target = event.target
+      if (target instanceof Element) {
+        const tag = target.tagName
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON') return
+        if (target instanceof HTMLElement && target.isContentEditable) return
+        // Focus is on a route or culture inside the map: Space activates that.
+        if (mapContainerRef.current?.contains(target)) return
+      }
+      const controls = controlsRef.current
+      if (!controls) return
+      const rect = controls.getBoundingClientRect()
+      if (rect.top >= window.innerHeight || rect.bottom <= 0) return
+      event.preventDefault()
+      togglePlay()
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [currentDate, updateLayers])
+  }, [togglePlay])
 
   // Animation loop
   useEffect(() => {
-    if (!isPlaying) {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current)
-      return
-    }
+    if (!isAnimating) return
 
     let lastTime = 0
     let accDate = dateRef.current
@@ -577,10 +910,10 @@ export default function MigrationMap() {
       accDate += (delta / 1000) * animSpeed
 
       if (accDate >= MAX_DATE) {
-        accDate = MAX_DATE
-        setIsPlaying(false)
-        setCurrentDate(MAX_DATE)
+        dateRef.current = MAX_DATE
         updateLayers(MAX_DATE)
+        setCurrentDate(MAX_DATE)
+        setIsPlaying(false)
         return
       }
 
@@ -594,77 +927,123 @@ export default function MigrationMap() {
     animationRef.current = requestAnimationFrame(step)
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current)
+      animationRef.current = null
     }
-  }, [isPlaying, updateLayers, animSpeed])
+  }, [isAnimating, animSpeed, updateLayers])
 
-  // Close popup on map click
+  // Detail cards take focus so keyboard users land on the content they opened.
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const handler = () => { setSelectedCulture(null); setSelectedBranch(null) }
-    map.on('click', handler)
-    return () => { map.off('click', handler) }
+    if (selectedCulture) cultureCardRef.current?.focus()
+  }, [selectedCulture])
+
+  useEffect(() => {
+    if (selectedBranch) branchCardRef.current?.focus()
+  }, [selectedBranch])
+
+  const dismissCards = useCallback(() => {
+    setSelectedCulture(null)
+    setSelectedBranch(null)
+    // Hand focus back to the map so keyboard users are not dropped at the
+    // document start, without yanking the viewport for mouse users.
+    mapContainerRef.current?.focus({ preventScroll: true })
   }, [])
 
-  // Legend data (same migration-dependency logic as the map)
-  const visibleCulturesList = cultures.filter(c => {
-    if (c.startDate > currentDate || c.endDate < currentDate) return false
-    const depMigrationId = CULTURE_MIGRATION_DEPENDENCY[c.id]
-    if (!depMigrationId) return true
-    const depMigration = migrations.find(m => m.id === depMigrationId)
-    if (!depMigration) return true
-    if (depMigration.startDate > currentDate) return false
-    const progress = (currentDate - depMigration.startDate) / (depMigration.endDate - depMigration.startDate)
-    return progress >= 0.7
-  })
-  const activeMigrations = migrations.filter(m => m.startDate <= currentDate)
+  const visibleCulturesList = useMemo(() => getVisibleCultures(currentDate), [currentDate])
+  const activeMigrations = useMemo(
+    () => migrations.filter(m => m.startDate <= currentDate),
+    [currentDate]
+  )
+
+  const routeLegendItems: LegendItem[] = useMemo(
+    () =>
+      activeMigrations.map(m => ({
+        color: m.color,
+        label: `${routeLabel(m)} — ${m.endDate >= currentDate ? 'advancing' : 'settled'}`,
+        dimmed: m.endDate < currentDate,
+      })),
+    [activeMigrations, currentDate]
+  )
+
+  const cultureLegendItems: LegendItem[] = useMemo(
+    () => visibleCulturesList.map(c => ({ color: c.color, label: cultureLabel(c) })),
+    [visibleCulturesList]
+  )
+
+  const atEnd = currentDate >= MAX_DATE - 50
+  const playLabel = reducedMotion
+    ? atEnd
+      ? 'Return the map to 4500 BCE'
+      : 'Skip to the end of the migrations'
+    : isPlaying
+      ? 'Pause the migration animation'
+      : 'Play the migration animation'
+
+  const cardBaseStyle = {
+    position: 'absolute' as const,
+    bottom: 10,
+    left: 10,
+    right: 10,
+    zIndex: 1001,
+    padding: '1rem',
+    background: 'rgba(255, 255, 255, 0.97)',
+    backdropFilter: 'blur(12px)',
+    borderRadius: 10,
+    boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+    maxHeight: '60%',
+    overflowY: 'auto' as const,
+  }
+
+  const closeButtonStyle = {
+    width: 28,
+    height: 28,
+    borderRadius: '50%',
+    border: `1px solid ${withAlpha(brand.textOnLight, 0.2)}`,
+    background: withAlpha(brand.textOnLight, 0.08),
+    color: brand.textOnLightSecondary,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    padding: 0,
+  }
 
   return (
     <div style={{ width: '100%' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '1.5rem', maxWidth: '65ch', marginLeft: 'auto', marginRight: 'auto' }}>
-        <InteractiveLabel />
-        <h3 style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'clamp(1.5rem, 3vw, 2rem)',
-          color: 'var(--text-bright)',
-          marginBottom: '0.75rem',
-        }}>
-          The Migration Map
-        </h3>
-        <p style={{
-          color: 'var(--text-on-dark-secondary)',
-          fontSize: '1rem',
-        }}>
+      <VizHeading title="The Migration Map">
+        <p style={{ marginBottom: '0.5rem' }}>
           Press play to watch Indo-European languages spread from the homeland across
-          Eurasia. Click any <strong style={{ color: 'var(--text-bright)' }}>route</strong> or <strong style={{ color: 'var(--text-bright)' }}>culture</strong> on
-          the map for details, including genetic ancestry breakdowns.
+          Eurasia. Select any <strong style={{ color: 'var(--text-bright)' }}>route</strong> or{' '}
+          <strong style={{ color: 'var(--text-bright)' }}>culture</strong> on the map for
+          details, including genetic ancestry breakdowns.
         </p>
-        <p style={{
-          color: 'var(--text-on-dark-muted)',
-          fontSize: '0.8rem',
-          fontStyle: 'italic',
-          marginTop: '0.5rem',
-        }}>
+        <p style={{ marginBottom: '0.5rem' }}>
+          Every route and culture is reachable with <kbd style={keyStyle}>Tab</kbd>; press{' '}
+          <kbd style={keyStyle}>Enter</kbd> or <kbd style={keyStyle}>Space</kbd> to open
+          its details.
+        </p>
+        <p style={{ fontSize: '0.8rem', fontStyle: 'italic', color: 'var(--text-on-dark-muted)' }}>
           Routes and dates reflect scholarship as of 2025 and may be revised as new research emerges.
         </p>
-      </div>
+      </VizHeading>
 
       {/* Map */}
       <div style={{
         position: 'relative',
         borderRadius: 12,
         overflow: 'hidden',
-        border: '1px solid rgba(139, 115, 85, 0.3)',
+        border: `1px solid ${withAlpha(brand.bronze, 0.3)}`,
         boxShadow: '0 4px 24px rgba(0, 0, 0, 0.3)',
       }}>
         <div
           ref={mapContainerRef}
           className="migration-map-container"
+          role="region"
+          aria-label="Interactive map of Indo-European migration routes and archaeological cultures"
           style={{
             width: '100%',
             height: 600,
-            background: '#e8e0d0',
+            background: MAP_BACKDROP,
           }}
         />
 
@@ -678,13 +1057,14 @@ export default function MigrationMap() {
           background: 'rgba(255, 255, 255, 0.92)',
           backdropFilter: 'blur(8px)',
           borderRadius: 8,
-          border: '1px solid rgba(139, 115, 85, 0.3)',
+          border: `1px solid ${withAlpha(brand.bronze, 0.3)}`,
           boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          pointerEvents: 'none',
         }}>
           <div style={{
             fontFamily: 'var(--font-display)',
             fontSize: '1.6rem',
-            color: '#8B6914',
+            color: brand.ochreDark,
             fontWeight: 600,
             lineHeight: 1,
           }}>
@@ -692,244 +1072,101 @@ export default function MigrationMap() {
           </div>
         </div>
 
-        {/* Legend */}
-        <div style={{
-          position: 'absolute',
-          bottom: 12,
-          left: 12,
-          zIndex: 1000,
-          padding: legendOpen ? '1rem' : '0.5rem 0.75rem',
-          background: 'rgba(255, 255, 255, 0.94)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: 10,
-          border: '1px solid rgba(139, 115, 85, 0.25)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-          maxHeight: legendOpen ? (window.innerWidth <= 768 ? '45vh' : 320) : 'auto',
-          overflowY: legendOpen ? 'auto' : 'hidden',
-          minWidth: legendOpen ? 200 : 'auto',
-          maxWidth: 300,
-        }}>
-          <div
-            onClick={() => setLegendOpen(!legendOpen)}
-            style={{
-              fontSize: '0.75rem',
-              color: '#555',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontWeight: 700,
-              marginBottom: legendOpen ? '0.6rem' : 0,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              userSelect: 'none',
-              gap: '0.5rem',
-            }}>
-            <span>Routes</span>
-            <span style={{ fontSize: '0.7rem' }}>
-              {legendOpen ? '▼' : '▶'}
-            </span>
-          </div>
-          {legendOpen && (
-            <>
-              {activeMigrations.length === 0 ? (
-                <div style={{
-                  fontSize: '0.8rem',
-                  color: '#999',
-                  fontStyle: 'italic',
-                }}>
-                  Press play to begin...
-                </div>
-              ) : (
-                activeMigrations.map(m => {
-                  const isActive = m.startDate <= currentDate && m.endDate >= currentDate
-                  return (
-                    <div key={m.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      marginBottom: '0.35rem',
-                      fontSize: '0.8rem',
-                      color: isActive ? '#222' : '#777',
-                      fontFamily: 'var(--font-body)',
-                      fontWeight: isActive ? 700 : 400,
-                    }}>
-                      <span style={{
-                        width: 24, height: 5,
-                        background: m.color,
-                        flexShrink: 0,
-                        borderRadius: 3,
-                        opacity: isActive ? 1 : 0.5,
-                      }} />
-                      <span style={{ lineHeight: 1.3 }}>
-                        {(SHORT_LABELS[m.id] || m.branch || m.name).replace('\n', ' / ')}
-                        {isActive && (
-                          <span style={{
-                            marginLeft: 4,
-                            color: m.color,
-                            fontSize: '0.7rem',
-                          }}>&#9654;</span>
-                        )}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-
-              {visibleCulturesList.length > 0 && (
-                <>
-                  <div style={{
-                    fontSize: '0.75rem',
-                    color: '#555',
-                    fontFamily: 'var(--font-body)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    fontWeight: 700,
-                    marginTop: '0.6rem',
-                    marginBottom: '0.4rem',
-                    borderTop: '1px solid rgba(0,0,0,0.1)',
-                    paddingTop: '0.5rem',
-                  }}>
-                    Active Cultures
-                  </div>
-                  {visibleCulturesList.map(c => (
-                    <div key={c.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      marginBottom: '0.3rem',
-                      fontSize: '0.8rem',
-                      color: '#444',
-                      fontFamily: 'var(--font-body)',
-                    }}>
-                      <span style={{
-                        width: 12, height: 12,
-                        borderRadius: 3,
-                        background: c.color,
-                        flexShrink: 0,
-                        opacity: 0.7,
-                        border: '1px solid rgba(0,0,0,0.15)',
-                      }} />
-                      {c.name.split('(')[0].trim()}
-                    </div>
-                  ))}
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Culture popup — bottom-anchored on mobile, floating on desktop */}
+        {/* Culture detail card */}
         {selectedCulture && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            ref={cultureCardRef}
+            role="group"
+            aria-label={`${selectedCulture.name} details`}
+            tabIndex={-1}
+            onKeyDown={event => {
+              if (event.key === 'Escape') dismissCards()
+            }}
+            initial={reducedMotion ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             style={{
-              position: 'absolute',
-              bottom: 10,
-              left: 10,
-              right: 10,
+              ...cardBaseStyle,
               maxWidth: 320,
-              zIndex: 1001,
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.97)',
-              backdropFilter: 'blur(12px)',
-              borderRadius: 10,
-              border: `2px solid ${selectedCulture.culture.color}66`,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-              maxHeight: '60%',
-              overflowY: 'auto',
+              border: `2px solid ${withAlpha(selectedCulture.color, 0.4)}`,
             }}
           >
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem',
             }}>
-              <span style={{
+              <span aria-hidden="true" style={{
                 width: 12, height: 12, borderRadius: '50%',
-                background: selectedCulture.culture.color,
+                background: selectedCulture.color,
               }} />
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: '1.1rem',
-                color: '#2C2416', fontWeight: 600, flex: 1,
+                color: brand.textOnLight, fontWeight: 600, flex: 1,
               }}>
-                {selectedCulture.culture.name}
+                {selectedCulture.name}
               </span>
               <button
-                onClick={() => setSelectedCulture(null)}
+                type="button"
+                onClick={dismissCards}
                 aria-label="Close culture detail"
-                style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  border: '1px solid rgba(0,0,0,0.2)',
-                  background: 'rgba(0,0,0,0.08)',
-                  color: '#555', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '16px', lineHeight: 1, flexShrink: 0,
-                  padding: 0, fontWeight: 700,
-                }}
+                style={closeButtonStyle}
               >
-                &times;
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+                  <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
               </button>
             </div>
             <div style={{
-              fontSize: '0.75rem', color: '#706454',
+              fontSize: '0.75rem', color: brand.textOnLightMuted,
               fontFamily: 'var(--font-body)', marginBottom: '0.5rem',
             }}>
-              {dateToLabel(selectedCulture.culture.startDate)} to {dateToLabel(selectedCulture.culture.endDate)}
-              &nbsp;&middot;&nbsp;{selectedCulture.culture.region}
+              {dateToLabel(selectedCulture.startDate)} to {dateToLabel(selectedCulture.endDate)}
+              &nbsp;&middot;&nbsp;{selectedCulture.region}
             </div>
             <p style={{
-              fontSize: '0.8rem', color: '#5A4E3A',
+              fontSize: '0.8rem', color: brand.textOnLightSecondary,
               lineHeight: 1.5, fontFamily: 'var(--font-body)',
-              marginBottom: selectedCulture.culture.geneticProfile ? '0.75rem' : 0,
+              marginBottom: selectedCulture.geneticProfile ? '0.75rem' : 0,
             }}>
-              {selectedCulture.culture.description}
+              {selectedCulture.description}
             </p>
 
-            {selectedCulture.culture.geneticProfile && (
+            {selectedCulture.geneticProfile && (
               <div>
                 <div style={{
-                  fontSize: '0.7rem', color: '#706454',
+                  fontSize: '0.7rem', color: brand.textOnLightMuted,
                   fontFamily: 'var(--font-body)', textTransform: 'uppercase',
                   letterSpacing: '0.08em', marginBottom: '0.3rem',
                 }}>
                   Genetic Ancestry
                 </div>
-                <div style={{
+                <div aria-hidden="true" style={{
                   display: 'flex', height: 8, borderRadius: 4,
                   overflow: 'hidden', gap: 1,
                 }}>
-                  {Object.entries(selectedCulture.culture.geneticProfile).map(([key, value]) => {
+                  {Object.entries(selectedCulture.geneticProfile).map(([key, value]) => {
                     if (!value) return null
-                    const colors: Record<string, string> = {
-                      WHG: '#4A90D9', EHG: '#7BB3E0', CHG: '#9B59B6',
-                      EEF: '#27AE60', Steppe: '#E67E22',
-                    }
                     return (
-                      <div key={key} title={`${key}: ${value}%`} style={{
-                        width: `${value}%`, background: colors[key] || '#888', borderRadius: 2,
+                      <div key={key} style={{
+                        width: `${value}%`,
+                        background: GENETIC_COLORS[key] || GENETIC_FALLBACK,
+                        borderRadius: 2,
                       }} />
                     )
                   })}
                 </div>
                 <div style={{
-                  display: 'flex', gap: '0.5rem', marginTop: '0.25rem', flexWrap: 'wrap',
+                  display: 'flex', gap: '0.5rem', marginTop: '0.35rem', flexWrap: 'wrap',
                 }}>
-                  {Object.entries(selectedCulture.culture.geneticProfile).map(([key, value]) => {
+                  {Object.entries(selectedCulture.geneticProfile).map(([key, value]) => {
                     if (!value) return null
-                    const colors: Record<string, string> = {
-                      WHG: '#4A90D9', EHG: '#7BB3E0', CHG: '#9B59B6',
-                      EEF: '#27AE60', Steppe: '#E67E22',
-                    }
                     return (
-                      <span key={key} title={GENETIC_LABELS[key] || key} style={{
-                        fontSize: '0.7rem', color: '#706454',
+                      <span key={key} style={{
+                        fontSize: '0.7rem', color: brand.textOnLightMuted,
                         fontFamily: 'var(--font-body)',
-                        display: 'inline-flex', alignItems: 'center', gap: '0.2rem',
+                        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
                       }}>
-                        <span style={{
+                        <span aria-hidden="true" style={{
                           width: 6, height: 6, borderRadius: 2,
-                          background: colors[key] || '#888',
+                          background: GENETIC_COLORS[key] || GENETIC_FALLBACK,
                           flexShrink: 0,
                         }} />
                         {GENETIC_LABELS[key] || key} {value}%
@@ -942,77 +1179,68 @@ export default function MigrationMap() {
           </motion.div>
         )}
 
-        {/* Branch popup — bottom-anchored on mobile, floating on desktop */}
+        {/* Branch detail card */}
         {selectedBranch && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            ref={branchCardRef}
+            role="group"
+            aria-label={`${routeLabel(selectedBranch)} migration details`}
+            tabIndex={-1}
+            onKeyDown={event => {
+              if (event.key === 'Escape') dismissCards()
+            }}
+            initial={reducedMotion ? false : { opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             style={{
-              position: 'absolute',
-              bottom: 10,
-              left: 10,
-              right: 10,
+              ...cardBaseStyle,
               maxWidth: 340,
-              zIndex: 1001,
-              padding: '1rem',
-              background: 'rgba(255, 255, 255, 0.97)',
-              backdropFilter: 'blur(12px)',
-              borderRadius: 10,
-              border: `2px solid ${selectedBranch.migration.color}66`,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-              maxHeight: '60%',
-              overflowY: 'auto',
+              border: `2px solid ${withAlpha(selectedBranch.color, 0.4)}`,
             }}
           >
             <div style={{
               display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem',
             }}>
-              <span style={{
+              <span aria-hidden="true" style={{
                 width: 12, height: 12, borderRadius: '50%',
-                background: selectedBranch.migration.color,
+                background: selectedBranch.color,
               }} />
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: '1.1rem',
-                color: '#2C2416', fontWeight: 600, flex: 1,
+                color: brand.textOnLight, fontWeight: 600, flex: 1,
               }}>
-                {(SHORT_LABELS[selectedBranch.migration.id] || selectedBranch.migration.branch || '').replace('\n', ' / ')}
+                {routeLabel(selectedBranch)}
               </span>
               <button
-                onClick={() => setSelectedBranch(null)}
+                type="button"
+                onClick={dismissCards}
                 aria-label="Close migration detail"
-                style={{
-                  width: 28, height: 28, borderRadius: '50%',
-                  border: '1px solid rgba(0,0,0,0.2)',
-                  background: 'rgba(0,0,0,0.08)',
-                  color: '#555', cursor: 'pointer',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '16px', lineHeight: 1, flexShrink: 0,
-                  padding: 0, fontWeight: 700,
-                }}
+                style={closeButtonStyle}
               >
-                &times;
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+                  <path d="M3 3 L11 11 M11 3 L3 11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
               </button>
             </div>
             <div style={{
-              fontSize: '0.75rem', color: '#706454',
+              fontSize: '0.75rem', color: brand.textOnLightMuted,
               fontFamily: 'var(--font-body)', marginBottom: '0.25rem',
             }}>
-              {dateToLabel(selectedBranch.migration.startDate)} to {dateToLabel(selectedBranch.migration.endDate)}
+              {dateToLabel(selectedBranch.startDate)} to {dateToLabel(selectedBranch.endDate)}
             </div>
-            {selectedBranch.migration.branch && (
+            {selectedBranch.branch && (
               <div style={{
-                fontSize: '0.7rem', color: selectedBranch.migration.color,
-                fontFamily: 'var(--font-body)', fontWeight: 600, marginBottom: '0.5rem',
+                fontSize: '0.7rem', color: brand.textOnLightSecondary,
+                fontFamily: 'var(--font-body)', fontWeight: 700, marginBottom: '0.5rem',
               }}>
-                {selectedBranch.migration.branch}
+                {selectedBranch.branch}
               </div>
             )}
             <p style={{
-              fontSize: '0.8rem', color: '#5A4E3A',
+              fontSize: '0.8rem', color: brand.textOnLightSecondary,
               lineHeight: 1.5, fontFamily: 'var(--font-body)',
               marginBottom: 0,
             }}>
-              {selectedBranch.migration.description}
+              {selectedBranch.description}
             </p>
           </motion.div>
         )}
@@ -1022,45 +1250,73 @@ export default function MigrationMap() {
       <div ref={controlsRef} style={{
         marginTop: '1rem',
         padding: '1rem 1.25rem',
-        background: 'rgba(26, 31, 43, 0.5)',
+        background: withAlpha(brand.bgSurface, 0.5),
         borderRadius: 12,
-        border: '1px solid rgba(139, 115, 85, 0.2)',
+        border: `1px solid ${withAlpha(brand.bronze, 0.2)}`,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <div style={{ position: 'relative', flexShrink: 0 }}>
-            {!hasInteracted && !isPlaying && (
-              <span style={{
-                position: 'absolute',
-                inset: -4,
-                borderRadius: '50%',
-                border: '2px solid var(--ochre)',
-                animation: 'migration-pulse 2s ease-in-out infinite',
-                pointerEvents: 'none',
-              }} />
+            {/*
+              Attention ring. Driven by Framer rather than `.homeland-pulse`,
+              whose keyframes animate the SVG-only `r` property and fade to
+              zero — on an HTML span that reads as a dim blink instead of an
+              expanding pulse. The `!reducedMotion` guard is what stops the
+              loop; the stylesheet's reduced-motion block cannot reach a
+              JS-driven animation.
+            */}
+            {!hasInteracted && !isPlaying && !reducedMotion && (
+              <motion.span
+                aria-hidden="true"
+                initial={{ opacity: 0.3, scale: 1 }}
+                animate={{ opacity: [0.3, 0.8, 0.3], scale: [1, 1.15, 1] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                style={{
+                  position: 'absolute',
+                  inset: -4,
+                  borderRadius: '50%',
+                  border: `2px solid ${brand.ochreLight}`,
+                  pointerEvents: 'none',
+                }}
+              />
             )}
             <button
-              onClick={() => {
-                setHasInteracted(true)
-                if (currentDate >= MAX_DATE - 50) {
-                  setCurrentDate(MIN_DATE)
-                  dateRef.current = MIN_DATE
-                  updateLayers(MIN_DATE)
-                }
-                setIsPlaying(!isPlaying)
-              }}
-              aria-label={isPlaying ? 'Pause animation' : 'Play animation'}
+              type="button"
+              onClick={togglePlay}
+              aria-label={playLabel}
+              title={playLabel}
               style={{
                 width: 44, height: 44, borderRadius: '50%',
-                border: '2px solid var(--ochre-dark)',
-                background: isPlaying ? 'rgba(200, 169, 110, 0.15)' : 'rgba(200, 169, 110, 0.08)',
+                border: `2px solid ${brand.ochreDark}`,
+                background: withAlpha(brand.ochreLight, isAnimating ? 0.18 : 0.08),
                 color: 'var(--ochre)',
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.1rem', flexShrink: 0,
-                transition: 'all 0.2s',
+                flexShrink: 0,
+                transition: 'background 0.2s, border-color 0.2s',
               }}
             >
-              {isPlaying ? '⏸' : '▶'}
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+                {reducedMotion ? (
+                  atEnd ? (
+                    <>
+                      <rect x="2.5" y="2.5" width="2.5" height="11" rx="1" fill="currentColor" />
+                      <path d="M13.5 2.5 L6.5 8 L13.5 13.5 Z" fill="currentColor" />
+                    </>
+                  ) : (
+                    <>
+                      <path d="M2.5 2.5 L9.5 8 L2.5 13.5 Z" fill="currentColor" />
+                      <rect x="11" y="2.5" width="2.5" height="11" rx="1" fill="currentColor" />
+                    </>
+                  )
+                ) : isPlaying ? (
+                  <>
+                    <rect x="3.5" y="2.5" width="3.5" height="11" rx="1" fill="currentColor" />
+                    <rect x="9" y="2.5" width="3.5" height="11" rx="1" fill="currentColor" />
+                  </>
+                ) : (
+                  <path d="M4 2.5 L13 8 L4 13.5 Z" fill="currentColor" />
+                )}
+              </svg>
             </button>
           </div>
 
@@ -1070,14 +1326,13 @@ export default function MigrationMap() {
             max={MAX_DATE}
             step={25}
             value={currentDate}
-            onChange={(e) => {
+            onChange={event => {
               setHasInteracted(true)
-              const val = Number(e.target.value)
-              setCurrentDate(val)
-              dateRef.current = val
               setIsPlaying(false)
+              jumpTo(Number(event.target.value))
             }}
             aria-label="Migration timeline date"
+            aria-valuetext={dateToLabel(Math.round(currentDate))}
             style={{ flex: 1, accentColor: 'var(--ochre)', cursor: 'pointer' }}
           />
 
@@ -1096,53 +1351,137 @@ export default function MigrationMap() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          flexWrap: 'wrap',
           gap: '1rem',
         }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-          }}>
-            {SPEED_OPTIONS.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => setAnimSpeed(opt.value)}
-                aria-label={`Set speed to ${opt.label}`}
-                style={{
-                  padding: '0.35rem 0.75rem',
-                  fontSize: '0.85rem',
-                  fontFamily: 'var(--font-body)',
-                  fontWeight: animSpeed === opt.value ? 700 : 400,
-                  color: animSpeed === opt.value ? 'var(--ochre)' : 'var(--text-on-dark-muted)',
-                  background: animSpeed === opt.value ? 'rgba(200, 169, 110, 0.15)' : 'transparent',
-                  border: `1px solid ${animSpeed === opt.value ? 'rgba(200, 169, 110, 0.4)' : 'rgba(255,255,255,0.15)'}`,
-                  borderRadius: 6,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          <span style={{
+          {!reducedMotion && (
+            <div role="group" aria-label="Playback speed" style={{
+              display: 'flex', alignItems: 'center', gap: '0.4rem',
+            }}>
+              {SPEED_OPTIONS.map(opt => {
+                const selected = animSpeed === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAnimSpeed(opt.value)}
+                    aria-pressed={selected}
+                    aria-label={`Playback speed ${opt.label}`}
+                    style={{
+                      padding: '0.4rem 0.75rem',
+                      minHeight: 32,
+                      fontSize: '0.85rem',
+                      fontFamily: 'var(--font-body)',
+                      fontWeight: selected ? 700 : 400,
+                      color: selected ? 'var(--ochre)' : 'var(--text-on-dark-muted)',
+                      background: selected ? withAlpha(brand.ochreLight, 0.15) : 'transparent',
+                      border: `1px solid ${withAlpha(brand.ochreLight, selected ? 0.4 : 0.15)}`,
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      transition: 'background 0.2s, border-color 0.2s',
+                    }}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          <span aria-live="polite" style={{
             fontSize: '0.9rem',
             color: 'var(--text-on-dark-secondary)',
             fontFamily: 'var(--font-body)',
           }}>
-            {currentDate >= MAX_DATE - 50
-              ? 'Click routes or cultures for details'
-              : isPlaying
-                ? 'Playing'
-                : !hasInteracted
-                  ? 'Press play or spacebar to begin'
-                  : 'Drag the slider or press play'}
+            {reducedMotion
+              ? 'Reduced motion is on — drag the slider to scrub the timeline.'
+              : atEnd
+                ? 'Select routes or cultures for details'
+                : isPlaying
+                  ? 'Playing'
+                  : !hasInteracted
+                    ? 'Press play or spacebar to begin'
+                    : 'Drag the slider or press play'}
           </span>
         </div>
-        <style>{`
-          @keyframes migration-pulse {
-            0%, 100% { opacity: 0.3; transform: scale(1); }
-            50% { opacity: 0.8; transform: scale(1.15); }
-          }
-        `}</style>
+      </div>
+
+      {/* Map key */}
+      <div style={{
+        marginTop: '0.75rem',
+        padding: '0.75rem 1.25rem 1rem',
+        background: withAlpha(brand.bgSurface, 0.5),
+        borderRadius: 12,
+        border: `1px solid ${withAlpha(brand.bronze, 0.2)}`,
+      }}>
+        <button
+          type="button"
+          onClick={() => setLegendOverride(!legendOpen)}
+          aria-expanded={legendOpen}
+          aria-controls={legendPanelId}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '0.5rem',
+            width: '100%',
+            minHeight: 32,
+            padding: '0.25rem 0',
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--text-on-dark-secondary)',
+            fontFamily: 'var(--font-body)',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            textTransform: 'uppercase',
+          }}
+        >
+          <span>Map key</span>
+          <svg
+            width="12" height="12" viewBox="0 0 12 12"
+            aria-hidden="true" focusable="false"
+            style={{
+              flexShrink: 0,
+              transform: legendOpen ? 'rotate(90deg)' : 'none',
+              transition: 'transform 0.2s',
+            }}
+          >
+            <path d="M4 2 L9 6 L4 10 Z" fill="currentColor" />
+          </svg>
+        </button>
+
+        <div
+          id={legendPanelId}
+          hidden={!legendOpen}
+          style={{
+            marginTop: '0.6rem',
+            maxHeight: isMobile ? '45vh' : 300,
+            overflowY: 'auto',
+          }}
+        >
+          {routeLegendItems.length === 0 ? (
+            <p style={{
+              fontSize: '0.8rem',
+              fontStyle: 'italic',
+              color: 'var(--text-on-dark-muted)',
+              fontFamily: 'var(--font-body)',
+              margin: 0,
+            }}>
+              Press play to begin — routes appear here as they set out.
+            </p>
+          ) : (
+            <Legend title="Migration routes" shape="line" items={routeLegendItems} />
+          )}
+          {cultureLegendItems.length > 0 && (
+            <Legend
+              title="Cultures on the map"
+              shape="dot"
+              items={cultureLegendItems}
+              style={{ marginTop: '0.9rem' }}
+            />
+          )}
+        </div>
       </div>
     </div>
   )

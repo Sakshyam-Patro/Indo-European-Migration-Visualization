@@ -1,89 +1,104 @@
 # Indo-European Explorer
 
-### A 6,000-Year Journey Through Language, Myth, and DNA
+### Language, myth, and DNA across six thousand years
 
-An interactive explorable explanation tracing how a single language spoken on the Pontic-Caspian steppe became half the world's words. Built with React, D3, and Leaflet.
+An interactive explorable explanation of how a language spoken on the
+Pontic-Caspian steppe became the ancestor of tongues spoken by close to half the
+world today. Built with React, D3, and Leaflet.
 
-**[View Live Site](https://indo-european-explorer.com/)**
+**[View the live site](https://indo-european-explorer.com/)**
 
 ---
 
-## What Is This?
+## What is this?
 
-Nearly half the people on Earth speak an Indo-European language, from English and Spanish to Hindi and Persian. They all descend from a single tongue spoken around 4500 BCE. This interactive site lets you explore that story through nine narrative sections, each with hands-on visualizations.
+Roughly 400 living languages belong to the Indo-European family, spoken natively
+by around 3.2 billion people — from English and Spanish to Hindi and Persian.
+They descend from a single reconstructed language, Proto-Indo-European, spoken
+somewhere around 4500–2500 BCE. This site works through the evidence for that
+claim in nine sections, each with a visualisation you can operate yourself.
 
 ## Sections
 
-| # | Section | Interactive Component | What You Explore |
-|---|---------|----------------------|------------------|
-| 1 | **The Hook** | Word Chain | Trace "father" back through Old English, Latin, Sanskrit to Proto-Indo-European |
-| 2 | **The Discovery** | Cognate Explorer + Grimm's Law Machine | Compare cognates across 8 languages; see systematic sound shifts in action |
-| 3 | **Dating the Language** | Timeline | Drag a bracket to explore when PIE could have been spoken |
-| 4 | **The Homeland** | Migration Map | Watch animated arrows show Indo-European languages spreading across Eurasia |
-| 5 | **The Family Tree** | Language Tree | Explore the branching family of 400+ Indo-European languages |
-| 6 | **How Languages Spread** | Info Cards | Learn about elite dominance vs. mass migration, the steppe package, and language shift |
-| 7 | **Shared Mythology** | Myth Connection Explorer | Discover shared gods, rituals, and cosmic ideas across cultures |
-| 8 | **The DNA Evidence** | Ancestry Chart | See how ancient DNA ancestry components changed over millennia |
-| 9 | **Explorer** | Cognate Search | Search any English word to find its Proto-Indo-European root and cognates |
+| # | Section | Interactive | What you can do |
+|---|---------|-------------|-----------------|
+| — | Introduction | Word chain | Trace "father" back through Old English, Latin, and Sanskrit to PIE |
+| I | The Discovery | Cognate Explorer + Grimm's Law | Compare cognates across eight languages and watch the sound shifts |
+| II | When and Where? | Timeline | Drag a bracket across the evidence for when PIE was spoken |
+| III | The Homeland | Migration Map | Play the spread of steppe cultures across Eurasia |
+| IV | The Language Family | Language Tree | Expand branches of the family tree |
+| V | How Languages Spread | Language Pathways | Step through how each branch reached its historical range |
+| VI | Shared Mythology | Myth Explorer | Compare gods, rituals, and cosmic ideas across cultures |
+| VII | The DNA Revolution | Ancestry Chart | See ancestry components shift across millennia |
+| VIII | Explore | Cognate Search | Search any word for its PIE root and cognates |
 
-## Tech Stack
+## Accuracy
 
-- **React 19** + TypeScript + Vite
-- **D3.js** for data visualizations (language tree, ancestry chart, timeline)
-- **Leaflet** + React-Leaflet for the interactive migration map
-- **Framer Motion** for scroll-triggered animations
-- **Tailwind CSS** for styling
+The site makes empirical claims, so a few rules govern its content:
 
-## Getting Started
+- Every figure describing the site's own dataset is **computed from that
+  dataset** rather than written by hand, so the prose cannot drift from the data.
+- Contested scholarship — the trifunctional hypothesis, the Ivanov–Toporov
+  "basic myth", the Anatolian-branch route, glottochronological dates — is
+  attributed rather than asserted.
+- Sources live in [`src/data/references.ts`](src/data/references.ts) and are
+  listed in the site footer, with DOIs where verified.
+
+Corrections are welcome. If you find an error, please open an issue.
+
+## Accessibility
+
+The site is built to be usable without a mouse and without motion:
+
+- All hover-revealed information is also available on keyboard focus.
+- Drag interactions use Pointer Events and have arrow-key equivalents.
+- `prefers-reduced-motion` disables looping animation and autoplay throughout,
+  and auto-advancing content has a visible pause control.
+- A skip link, landmark regions, and a consistent heading order are in place.
+
+## Tech stack
+
+- **React 19** + TypeScript (strict) + Vite 7
+- **D3 7** for the language tree
+- **Leaflet 1.9** for the migration map — loaded only with that section
+- **Framer Motion 12** for scroll-triggered animation
+- Design tokens in `src/index.css`, mirrored as TS constants in `src/theme.ts`
+
+## Getting started
 
 ```bash
-# Clone the repo
 git clone https://github.com/Sakshyam-Patro/Indo-European-Migration-Visualization.git
 cd Indo-European-Migration-Visualization
-
-# Install dependencies
 npm install
-
-# Start dev server
 npm run dev
 ```
-
 
 ## Build
 
 ```bash
-npm run build
+npm run lint     # must pass
+npm run build    # type-checks and builds
 npm run preview
 ```
 
 ## Deployment
 
-The site auto-deploys to GitHub Pages via GitHub Actions on every push to `main`.
+Pushes to `main` deploy to GitHub Pages via `.github/workflows/deploy.yml`.
 
 ## References
 
-### Ancient DNA & Archaeogenomics
-- Lazaridis et al., "The Genetic Origin of the Indo-Europeans" (*Nature*, 2022; *Science*, 2025)
-- Haak et al., "Massive migration from the steppe was a source for Indo-European languages in Europe" (*Nature*, 2015)
-- Narasimhan et al., "The formation of human populations in South and Central Asia" (*Science*, 2019)
-- Olalde et al., "The Beaker Phenomenon and the Genomic Transformation of Northwest Europe" (*Nature*, 2018)
-- Reich, D., *Who We Are and How We Got Here* (2018)
+The full bibliography is in [`src/data/references.ts`](src/data/references.ts)
+and rendered in the site footer. Principal works include Anthony, *The Horse,
+the Wheel, and Language* (2007); Mallory & Adams, *The Oxford Introduction to
+Proto-Indo-European* (2006); Fortson, *Indo-European Language and Culture*
+(2010); Watkins, *How to Kill a Dragon* (1995); Reich, *Who We Are and How We
+Got Here* (2018); and papers by Haak et al. (2015), Olalde et al. (2018),
+Narasimhan et al. (2019), Librado et al. (2021), and Lazaridis et al. (2022).
 
-### Archaeology & Migration
-- Anthony, D.W., *The Horse, the Wheel, and Language* (2007)
-- Heyd, V., "Yamnaya, Corded Wares, and Bell Beakers on the Move" (2021)
-- Furholt, M., "Mobility and Social Change" (*Journal of Archaeological Research*, 2021)
+## Credits
 
-### Linguistics
-- Mallory, J.P. & Adams, D.Q., *The Oxford Introduction to Proto-Indo-European and the Proto-Indo-European World* (2006)
-- Mallory, J.P., *In Search of the Indo-Europeans* (1989)
-- Fortson, B.W., *Indo-European Language and Culture* (2010)
-
-### Comparative Mythology
-- Watkins, C., *How to Kill a Dragon: Aspects of Indo-European Poetics* (1995)
-- West, M.L., *The East Face of Helicon* (1997)
-- Witzel, M., *The Origins of the World's Mythologies* (2012)
+Map data © OpenStreetMap contributors (ODbL); tiles © CARTO.
 
 ## License
 
-MIT
+[MIT](LICENSE)
