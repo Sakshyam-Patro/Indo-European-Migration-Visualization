@@ -7,40 +7,30 @@ interface InteractiveLabelProps {
 }
 
 /**
- * Canonical "Interactive" pill badge shown above every interactive
- * visualization. Keep this the single source of truth — do not hand-roll
- * copies in individual components.
+ * Canonical "Interactive" cue shown above every interactive visualization.
+ * Deliberately quiet: plain sentence-case text with a small pointer, no pill,
+ * so it marks the block without competing with its heading. Keep this the
+ * single source of truth — do not hand-roll copies in individual components.
  */
 export function InteractiveLabel({ className, style }: InteractiveLabelProps) {
   return (
     <div
       className={className}
       style={{
-        display: 'inline-flex',
+        display: 'flex',
         alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.3rem 0.8rem',
-        background: 'rgba(13, 115, 119, 0.15)',
-        border: '1px solid rgba(13, 115, 119, 0.3)',
-        borderRadius: 20,
-        marginBottom: '1rem',
-        fontSize: '0.75rem',
-        color: 'var(--teal-light)',
+        gap: '0.4rem',
+        marginBottom: '0.6rem',
+        fontSize: '0.85rem',
+        lineHeight: 1.2,
+        color: 'var(--teal-soft)',
         fontFamily: 'var(--font-body)',
-        textTransform: 'uppercase',
-        letterSpacing: '0.1em',
         ...style,
       }}
     >
-      <span
-        style={{
-          width: 6,
-          height: 6,
-          borderRadius: '50%',
-          background: 'var(--teal-light)',
-          display: 'inline-block',
-        }}
-      />
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
+        <path d="M1.5 1l9 3.6-3.7 1.5L5.3 9.8z" />
+      </svg>
       Interactive
     </div>
   );

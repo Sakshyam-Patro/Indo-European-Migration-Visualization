@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cognates, type CognateEntry } from '../../data/cognates'
 import InteractiveLabel from '../ui/InteractiveLabel'
@@ -46,6 +46,17 @@ const LANG_COLORS: Record<string, string> = {
 export default function CognateExplorer() {
   const [selectedCognate, setSelectedCognate] = useState<CognateEntry | null>(null)
   const [hoveredLang, setHoveredLang] = useState<string | null>(null)
+  const detailRef = useRef<HTMLDivElement>(null)
+
+  // Bring the word's detail panel into view once it has finished opening
+  useEffect(() => {
+    if (!selectedCognate) return
+    const timer = setTimeout(() => {
+      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      detailRef.current?.scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'nearest' })
+    }, 320) // just after the 0.3s open animation
+    return () => clearTimeout(timer)
+  }, [selectedCognate])
 
   return (
     <div style={{ width: '100%' }}>
@@ -269,7 +280,9 @@ export default function CognateExplorer() {
             transition={{ duration: 0.3 }}
             style={{ overflow: 'hidden' }}
           >
-            <div style={{
+            <div ref={detailRef} style={{
+              scrollMarginTop: 80,
+              scrollMarginBottom: 16,
               marginTop: '1.5rem',
               padding: '1.5rem',
               background: 'rgba(20, 24, 32, 0.6)',

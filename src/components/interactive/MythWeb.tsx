@@ -44,33 +44,11 @@ export default function MythWeb() {
         </p>
       </div>
 
-      {/* Category filter pills */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '0.5rem',
-        marginBottom: '2rem',
-      }}>
+      {/* Category filter */}
+      <div className="filter-tabs" role="group" aria-label="Filter myths by category">
         <button
           onClick={() => setActiveCategory('all')}
-          aria-label="Filter by all categories"
-          style={{
-            padding: '0.4rem 1rem',
-            borderRadius: 20,
-            border: activeCategory === 'all'
-              ? '1px solid rgba(200, 169, 110, 0.5)'
-              : '1px solid rgba(255, 255, 255, 0.1)',
-            background: activeCategory === 'all'
-              ? 'rgba(200, 169, 110, 0.15)'
-              : 'rgba(255, 255, 255, 0.04)',
-            color: activeCategory === 'all'
-              ? 'var(--ochre)'
-              : 'var(--text-on-dark-muted)',
-            fontFamily: 'var(--font-body)',
-            fontSize: '0.8rem',
-            cursor: 'pointer',
-            transition: 'all 0.2s',
-          }}
+          aria-pressed={activeCategory === 'all'}
         >
           All
         </button>
@@ -81,22 +59,8 @@ export default function MythWeb() {
             <button
               key={cat}
               onClick={() => setActiveCategory(isActive ? 'all' : cat)}
-              aria-label={`Filter by ${label}`}
-              style={{
-                padding: '0.4rem 1rem',
-                borderRadius: 20,
-                border: isActive
-                  ? `1px solid ${color}80`
-                  : '1px solid rgba(255, 255, 255, 0.1)',
-                background: isActive
-                  ? `${color}22`
-                  : 'rgba(255, 255, 255, 0.04)',
-                color: isActive ? color : 'var(--text-on-dark-muted)',
-                fontFamily: 'var(--font-body)',
-                fontSize: '0.8rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
+              aria-pressed={isActive}
+              style={{ '--tab-color': color } as React.CSSProperties}
             >
               {label}
             </button>
@@ -151,19 +115,11 @@ export default function MythWeb() {
                   boxShadow: '0 4px 20px rgba(0, 0, 0, 0.2)',
                 }}
               >
-                {/* Category badge */}
+                {/* Category */}
                 <span style={{
-                  display: 'inline-flex',
-                  alignSelf: 'flex-start',
-                  padding: '0.2rem 0.6rem',
-                  borderRadius: 12,
-                  background: `${cat.color}20`,
-                  border: `1px solid ${cat.color}40`,
-                  fontSize: '0.7rem',
+                  fontSize: '0.8rem',
                   fontFamily: 'var(--font-body)',
                   color: cat.color,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.06em',
                 }}>
                   {cat.label}
                 </span>

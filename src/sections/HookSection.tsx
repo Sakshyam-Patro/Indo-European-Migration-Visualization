@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { addLandBasemap, NIGHT_LAND } from '../components/interactive/basemap'
 import { migrations } from '../data/migrations'
 
 const WORD_CHAIN = [
@@ -47,10 +48,7 @@ export default function HookSection() {
       keyboard: false,
     })
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map)
+    addLandBasemap(map, NIGHT_LAND)
 
     // Draw migration routes as background decoration
     migrations.forEach(route => {

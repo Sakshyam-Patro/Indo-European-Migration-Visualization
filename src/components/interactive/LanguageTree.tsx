@@ -648,37 +648,11 @@ export default function LanguageTree() {
 
           {/* Expand/Collapse buttons */}
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button
-              onClick={expandAll}
-              aria-label="Expand all tree branches"
-              style={{
-                background: 'rgba(13, 115, 119, 0.15)',
-                border: '1px solid rgba(13, 115, 119, 0.3)',
-                borderRadius: 8,
-                color: 'var(--teal-light)',
-                cursor: 'pointer',
-                padding: '0.45rem 0.9rem',
-                fontSize: '0.85rem',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Expand All
+            <button className="quiet-button" onClick={expandAll} aria-label="Expand all tree branches">
+              Expand all
             </button>
-            <button
-              onClick={collapseAll}
-              aria-label="Collapse all tree branches"
-              style={{
-                background: 'rgba(139, 115, 85, 0.15)',
-                border: '1px solid rgba(139, 115, 85, 0.3)',
-                borderRadius: 8,
-                color: 'var(--text-on-dark-muted)',
-                cursor: 'pointer',
-                padding: '0.45rem 0.9rem',
-                fontSize: '0.85rem',
-                fontFamily: 'var(--font-body)',
-              }}
-            >
-              Collapse All
+            <button className="quiet-button" onClick={collapseAll} aria-label="Collapse all tree branches">
+              Collapse all
             </button>
           </div>
         </div>

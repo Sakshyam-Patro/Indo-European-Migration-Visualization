@@ -20,6 +20,7 @@
   --teal: #0D7377;
   --teal-light: #14919B;
   --teal-dark: #0A5C5F;
+  --teal-soft: #6BC4CB; /* readable teal for small text on dark panels */
 
   /* Dark section backgrounds */
   --bg-deep: #141820;
@@ -270,7 +271,7 @@ a:hover {
    ======================================== */
 
 .leaflet-container {
-  background: var(--bg-deep) !important;
+  background: var(--bg-deep);
   font-family: var(--font-body) !important;
 }
 
@@ -365,4 +366,157 @@ a:hover {
   .migration-map-container {
     height: 400px !important;
   }
+}
+
+/* ========================================
+   MIGRATION MAP LABELS + LEGEND
+   Sizes here are mirrored by CHIP_FONT / PLACE_FONT in MigrationMap.tsx
+   ======================================== */
+
+.map-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 9px;
+  background: rgba(250, 246, 240, 0.95);
+  border: 1px solid rgba(44, 36, 22, 0.25);
+  border-radius: 3px;
+  font: 600 12px/1 var(--font-body);
+  color: #2C2416;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.map-chip:hover {
+  border-color: var(--c);
+  background: #fff;
+}
+
+.map-chip i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c);
+  flex-shrink: 0;
+}
+
+.map-chip span {
+  font-weight: 400;
+  font-size: 11px;
+  color: #706454;
+}
+
+/* Territory and homeland names: set like place names on a printed atlas */
+.map-place {
+  text-align: center;
+  white-space: nowrap;
+  line-height: 1.15;
+  text-shadow: 0 0 3px #F3ECDD, 0 0 3px #F3ECDD, 0 0 6px #F3ECDD;
+}
+
+.map-place b {
+  display: block;
+  font: 600 15px/1.15 var(--font-display);
+  color: color-mix(in srgb, var(--c) 55%, #2C2416);
+}
+
+.map-place span {
+  font: 400 11px/1.2 var(--font-body);
+  color: #5A4E3A;
+}
+
+.map-place--homeland {
+  font: italic 600 15px/1.15 var(--font-display);
+  color: var(--ochre-dark);
+}
+
+.map-legend {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid rgba(232, 226, 214, 0.1);
+  display: grid;
+  gap: 0.5rem;
+}
+
+.map-legend ul {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1.1rem;
+}
+
+.map-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-on-dark-secondary);
+  transition: opacity 0.3s, color 0.3s;
+}
+
+.map-legend li[data-state='ahead'] { opacity: 0.35; }
+.map-legend li[data-state='moving'] { color: var(--text-bright); font-weight: 600; }
+
+.map-legend__line { width: 18px; height: 3px; border-radius: 2px; flex-shrink: 0; }
+.map-legend__area { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; opacity: 0.8; }
+
+.leaflet-bar a {
+  background: #FAF6F0 !important;
+  color: #2C2416 !important;
+  border-color: rgba(44, 36, 22, 0.2) !important;
+}
+
+/* ========================================
+   CONTROLS ON DARK SECTIONS
+   ======================================== */
+
+.quiet-button {
+  padding: 0.4rem 0.8rem;
+  background: transparent;
+  border: 1px solid rgba(232, 226, 214, 0.22);
+  border-radius: 4px;
+  color: var(--text-on-dark-secondary);
+  font: 0.85rem var(--font-body);
+  cursor: pointer;
+}
+
+.quiet-button:hover {
+  border-color: var(--ochre-light);
+  color: var(--text-bright);
+}
+
+/* Filters read as tabs: the current one is underlined in its category colour */
+.filter-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 1.5rem;
+  margin-bottom: 2rem;
+  border-bottom: 1px solid rgba(232, 226, 214, 0.12);
+}
+
+.filter-tabs button {
+  padding: 0.5rem 0;
+  margin-bottom: -1px;
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--text-on-dark-muted);
+  font: 0.9rem var(--font-body);
+  cursor: pointer;
+}
+
+.filter-tabs button:hover {
+  color: var(--text-bright);
+}
+
+.filter-tabs button[aria-pressed='true'] {
+  color: var(--tab-color, var(--ochre-light));
+  border-bottom-color: currentColor;
+}
+
+.quiet-button:focus-visible,
+.filter-tabs button:focus-visible {
+  outline: 2px solid var(--ochre-light);
+  outline-offset: 2px;
 }

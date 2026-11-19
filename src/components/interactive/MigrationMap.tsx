@@ -7,6 +7,8 @@ import { territories } from '../../data/territories'
 
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { addLandBasemap, PARCHMENT_LAND } from './basemap'
+import { placeLabels, textWidth, type Box, type LabelRequest } from './labelLayout'
 
 const MIN_DATE = -4500
 const MAX_DATE = -800
@@ -95,6 +97,21 @@ const LABEL_OFFSETS: Record<string, [number, number]> = {
   'tocharian-route': [-1, 1.5],
 }
 
+function routeName(migration: (typeof migrations)[number]): string {
+  return (SHORT_LABELS[migration.id] || migration.branch || '').replace('\n', ' / ')
+}
+
+function routeDate(migration: (typeof migrations)[number]): string {
+  return `~${Math.abs(migration.endDate)} BCE`
+}
+
+// Must match .map-chip and .map-place in index.css; used to size labels before layout
+const CHIP_FONT = "600 12px 'Source Sans 3', sans-serif"
+const DATE_FONT = "400 11px 'Source Sans 3', sans-serif"
+const PLACE_FONT = "600 15px 'Cormorant Garamond', serif"
+const CHIP_HEIGHT = 22
+const CHIP_CHROME = 40 // padding, swatch, gaps, border
+
 /**
  * Maps culture IDs to the migration route that "created" them.
  * These cultures only appear on the map once the relevant migration
@@ -145,7 +162,6 @@ export default function MigrationMap() {
   const [isPlaying, setIsPlaying] = useState(false)
   const [selectedCulture, setSelectedCulture] = useState<CulturePopupData | null>(null)
   const [selectedBranch, setSelectedBranch] = useState<BranchPopupData | null>(null)
-  const [legendOpen, setLegendOpen] = useState(() => window.innerWidth > 768)
   const [hasInteracted, setHasInteracted] = useState(false)
   const [animSpeed, setAnimSpeed] = useState(ANIM_SPEED)
   const controlsRef = useRef<HTMLDivElement>(null)
@@ -169,21 +185,19 @@ export default function MigrationMap() {
     const map = L.map(mapContainerRef.current, {
       center: [42, 45],
       zoom: 3,
-      minZoom: 2,
+      minZoom: 3,
       maxZoom: 7,
+      maxBounds: [[-60, -180], [85, 180]],
+      maxBoundsViscosity: 1,
       zoomControl: false,
       attributionControl: false,
     })
 
-    // Light geographic basemap that shows terrain like the reference images
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}{r}.png', {
-      subdomains: 'abcd',
-      maxZoom: 19,
-    }).addTo(map)
+    addLandBasemap(map, PARCHMENT_LAND)
 
     L.control.zoom({ position: 'topright' }).addTo(map)
     L.control.attribution({ position: 'bottomright', prefix: false })
-      .addAttribution('&copy; <a href="https://carto.com">CARTO</a>')
+      .addAttribution('Coastlines: Natural Earth')
       .addTo(map)
 
     // Layer groups: territories (bottom) → routes → markers → labels (top)
@@ -219,16 +233,7 @@ export default function MigrationMap() {
         className: '',
         iconSize: [140, 40],
         iconAnchor: [70, -14],
-        html: `<div style="
-          text-align: center;
-          font-family: 'Source Sans 3', sans-serif;
-          font-size: 11px;
-          font-weight: 700;
-          color: #8B6914;
-          text-shadow: 0 0 4px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.7);
-          white-space: nowrap;
-          letter-spacing: 0.05em;
-        ">PIE HOMELAND</div>`,
+        html: `<div class="map-place map-place--homeland">PIE homeland</div>`,
       }),
       interactive: false,
     })
@@ -255,6 +260,14 @@ export default function MigrationMap() {
     routeLayerGroup.current.clearLayers()
     markerLayerGroup.current.clearLayers()
     labelLayerGroup.current.clearLayers()
+
+    // Screen-space boxes that route labels must keep clear of
+    const homelandPt = map.latLngToContainerPoint(PIE_HOMELAND)
+    const obstacles: Box[] = [
+      { x: homelandPt.x - 14, y: homelandPt.y - 14, w: 28, h: 28 },
+      { x: homelandPt.x - 48, y: homelandPt.y + 14, w: 96, h: 20 },
+    ]
+    const labelRequests: LabelRequest[] = []
 
     // ---------- TERRITORY POLYGONS (large, bold, visible) ----------
     // Cultures with a migration dependency only appear once that migration
@@ -302,31 +315,18 @@ export default function MigrationMap() {
           className: '',
           iconSize: [160, 42],
           iconAnchor: [80, 21],
-          html: `<div style="
-            text-align: center;
-            white-space: nowrap;
-            opacity: ${Math.min(1, opacity * 1.5)};
-          ">
-            <div style="
-              font-family: 'Source Sans 3', sans-serif;
-              font-size: 12px;
-              font-weight: 700;
-              color: ${culture.color};
-              text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8), 0 0 12px rgba(255,255,255,0.6);
-              letter-spacing: 0.03em;
-            ">${shortName}</div>
-            <div style="
-              font-family: 'Source Sans 3', sans-serif;
-              font-size: 10px;
-              font-weight: 600;
-              color: #555;
-              text-shadow: 0 0 4px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.8);
-            ">${dateRange}</div>
+          html: `<div class="map-place" style="opacity: ${Math.min(1, opacity * 1.5)}; --c: ${culture.color}">
+            <b>${shortName}</b>
+            <span>${dateRange}</span>
           </div>`,
         }),
         interactive: false,
       })
       markerLayerGroup.current!.addLayer(nameLabel)
+
+      const centerPt = map.latLngToContainerPoint(center)
+      const labelW = Math.max(textWidth(shortName, PLACE_FONT), textWidth(dateRange, DATE_FONT)) + 8
+      obstacles.push({ x: centerPt.x - labelW / 2, y: centerPt.y - 18, w: labelW, h: 36 })
     })
 
     // ---------- MIGRATION ROUTES (thick, bold arrows) ----------
@@ -449,65 +449,68 @@ export default function MigrationMap() {
         const endArrowMarker = L.marker(endpoint as L.LatLngExpression, { icon: endArrow, interactive: false })
         markerLayerGroup.current!.addLayer(endArrowMarker)
 
-        // Branch name label at endpoint (pill-shaped background)
-        const label = SHORT_LABELS[migration.id] || migration.branch || ''
-        if (label) {
-          const offset = LABEL_OFFSETS[migration.id] || [0, 0]
-          const labelPos: [number, number] = [
-            endpoint[0] + offset[0],
-            endpoint[1] + offset[1],
-          ]
-          const displayLabel = label.replace('\n', ' / ')
-          const dateStr = `~${Math.abs(migration.endDate)} BCE`
+        const endPt = map.latLngToContainerPoint(endpoint as L.LatLngExpression)
+        obstacles.push({ x: endPt.x - 10, y: endPt.y - 10, w: 20, h: 20 })
 
-          const branchLabel = L.marker(
-            labelPos as L.LatLngExpression,
-            {
-              icon: L.divIcon({
-                className: '',
-                iconSize: [140, 44],
-                iconAnchor: [70, 22],
-                html: `<div style="
-                  text-align: center;
-                  white-space: nowrap;
-                  cursor: pointer;
-                ">
-                  <div style="
-                    display: inline-block;
-                    padding: 4px 12px;
-                    background: ${migration.color}dd;
-                    color: #fff;
-                    font-family: 'Source Sans 3', sans-serif;
-                    font-size: 12px;
-                    font-weight: 700;
-                    border-radius: 10px;
-                    line-height: 1.3;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
-                    letter-spacing: 0.02em;
-                    transition: transform 0.15s, box-shadow 0.15s;
-                  ">${displayLabel}</div>
-                  <div style="
-                    font-family: 'Source Sans 3', sans-serif;
-                    font-size: 10px;
-                    font-weight: 700;
-                    color: #555;
-                    margin-top: 2px;
-                    text-shadow: 0 0 3px rgba(255,255,255,0.9);
-                  ">${dateStr}</div>
-                </div>`,
-              }),
-              interactive: true,
-            }
-          )
-          branchLabel.on('click', (e: L.LeafletMouseEvent) => {
-            L.DomEvent.stopPropagation(e)
-            const point = map.latLngToContainerPoint(e.latlng)
-            setSelectedBranch({ migration, x: point.x, y: point.y })
-            setSelectedCulture(null)
+        const name = routeName(migration)
+        if (name) {
+          const offset = LABEL_OFFSETS[migration.id] || [1, 1]
+          const w = Math.ceil(
+            textWidth(name, CHIP_FONT) + textWidth(routeDate(migration), DATE_FONT)
+          ) + CHIP_CHROME
+          labelRequests.push({
+            id: migration.id,
+            anchor: { x: endPt.x, y: endPt.y },
+            w,
+            h: CHIP_HEIGHT,
+            prefer: [Math.sign(offset[1]), -Math.sign(offset[0])],
+            startDate: migration.startDate,
+            endDate: migration.endDate,
           })
-          labelLayerGroup.current!.addLayer(branchLabel)
         }
       }
+    })
+
+    // ---------- ROUTE LABELS (laid out together so they never overlap) ----------
+    const placed = placeLabels(labelRequests, obstacles)
+    labelRequests.forEach(req => {
+      const box = placed.get(req.id)
+      const migration = migrations.find(m => m.id === req.id)
+      if (!box || !migration) return
+
+      // Hairline back to the route's end when the label had to move away from it
+      const nearX = Math.max(box.x, Math.min(req.anchor.x, box.x + box.w))
+      const nearY = Math.max(box.y, Math.min(req.anchor.y, box.y + box.h))
+      if (Math.hypot(nearX - req.anchor.x, nearY - req.anchor.y) > 20) {
+        const leader = L.polyline(
+          [
+            map.containerPointToLatLng([req.anchor.x, req.anchor.y]),
+            map.containerPointToLatLng([nearX, nearY]),
+          ],
+          { color: '#2C2416', weight: 1, opacity: 0.45, interactive: false }
+        )
+        labelLayerGroup.current!.addLayer(leader)
+      }
+
+      const chip = L.marker(
+        map.containerPointToLatLng([box.x + box.w / 2, box.y + box.h / 2]),
+        {
+          icon: L.divIcon({
+            className: '',
+            iconSize: [box.w, box.h],
+            iconAnchor: [box.w / 2, box.h / 2],
+            html: `<div class="map-chip" style="--c: ${migration.color}"><i></i>${routeName(migration)}<span>${routeDate(migration)}</span></div>`,
+          }),
+          interactive: true,
+        }
+      )
+      chip.on('click', (e: L.LeafletMouseEvent) => {
+        L.DomEvent.stopPropagation(e)
+        const point = map.latLngToContainerPoint(e.latlng)
+        setSelectedBranch({ migration, x: point.x, y: point.y })
+        setSelectedCulture(null)
+      })
+      labelLayerGroup.current!.addLayer(chip)
     })
 
     // ---------- CULTURE CENTER MARKERS ----------
@@ -534,6 +537,15 @@ export default function MigrationMap() {
   useEffect(() => {
     updateLayers(currentDate)
   }, [currentDate, updateLayers])
+
+  // Label positions are computed in pixels, so lay them out again after a zoom or resize
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const relayout = () => updateLayers(dateRef.current)
+    map.on('zoomend resize', relayout)
+    return () => { map.off('zoomend resize', relayout) }
+  }, [updateLayers])
 
   // Keyboard shortcut: spacebar to play/pause
   useEffect(() => {
@@ -617,7 +629,6 @@ export default function MigrationMap() {
     const progress = (currentDate - depMigration.startDate) / (depMigration.endDate - depMigration.startDate)
     return progress >= 0.7
   })
-  const activeMigrations = migrations.filter(m => m.startDate <= currentDate)
 
   return (
     <div style={{ width: '100%' }}>
@@ -664,7 +675,6 @@ export default function MigrationMap() {
           style={{
             width: '100%',
             height: 600,
-            background: '#e8e0d0',
           }}
         />
 
@@ -690,134 +700,6 @@ export default function MigrationMap() {
           }}>
             {dateToLabel(Math.round(currentDate))}
           </div>
-        </div>
-
-        {/* Legend */}
-        <div style={{
-          position: 'absolute',
-          bottom: 12,
-          left: 12,
-          zIndex: 1000,
-          padding: legendOpen ? '1rem' : '0.5rem 0.75rem',
-          background: 'rgba(255, 255, 255, 0.94)',
-          backdropFilter: 'blur(10px)',
-          borderRadius: 10,
-          border: '1px solid rgba(139, 115, 85, 0.25)',
-          boxShadow: '0 2px 12px rgba(0,0,0,0.12)',
-          maxHeight: legendOpen ? (window.innerWidth <= 768 ? '45vh' : 320) : 'auto',
-          overflowY: legendOpen ? 'auto' : 'hidden',
-          minWidth: legendOpen ? 200 : 'auto',
-          maxWidth: 300,
-        }}>
-          <div
-            onClick={() => setLegendOpen(!legendOpen)}
-            style={{
-              fontSize: '0.75rem',
-              color: '#555',
-              fontFamily: 'var(--font-body)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              fontWeight: 700,
-              marginBottom: legendOpen ? '0.6rem' : 0,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              userSelect: 'none',
-              gap: '0.5rem',
-            }}>
-            <span>Routes</span>
-            <span style={{ fontSize: '0.7rem' }}>
-              {legendOpen ? '▼' : '▶'}
-            </span>
-          </div>
-          {legendOpen && (
-            <>
-              {activeMigrations.length === 0 ? (
-                <div style={{
-                  fontSize: '0.8rem',
-                  color: '#999',
-                  fontStyle: 'italic',
-                }}>
-                  Press play to begin...
-                </div>
-              ) : (
-                activeMigrations.map(m => {
-                  const isActive = m.startDate <= currentDate && m.endDate >= currentDate
-                  return (
-                    <div key={m.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      marginBottom: '0.35rem',
-                      fontSize: '0.8rem',
-                      color: isActive ? '#222' : '#777',
-                      fontFamily: 'var(--font-body)',
-                      fontWeight: isActive ? 700 : 400,
-                    }}>
-                      <span style={{
-                        width: 24, height: 5,
-                        background: m.color,
-                        flexShrink: 0,
-                        borderRadius: 3,
-                        opacity: isActive ? 1 : 0.5,
-                      }} />
-                      <span style={{ lineHeight: 1.3 }}>
-                        {(SHORT_LABELS[m.id] || m.branch || m.name).replace('\n', ' / ')}
-                        {isActive && (
-                          <span style={{
-                            marginLeft: 4,
-                            color: m.color,
-                            fontSize: '0.7rem',
-                          }}>&#9654;</span>
-                        )}
-                      </span>
-                    </div>
-                  )
-                })
-              )}
-
-              {visibleCulturesList.length > 0 && (
-                <>
-                  <div style={{
-                    fontSize: '0.75rem',
-                    color: '#555',
-                    fontFamily: 'var(--font-body)',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.1em',
-                    fontWeight: 700,
-                    marginTop: '0.6rem',
-                    marginBottom: '0.4rem',
-                    borderTop: '1px solid rgba(0,0,0,0.1)',
-                    paddingTop: '0.5rem',
-                  }}>
-                    Active Cultures
-                  </div>
-                  {visibleCulturesList.map(c => (
-                    <div key={c.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      marginBottom: '0.3rem',
-                      fontSize: '0.8rem',
-                      color: '#444',
-                      fontFamily: 'var(--font-body)',
-                    }}>
-                      <span style={{
-                        width: 12, height: 12,
-                        borderRadius: 3,
-                        background: c.color,
-                        flexShrink: 0,
-                        opacity: 0.7,
-                        border: '1px solid rgba(0,0,0,0.15)',
-                      }} />
-                      {c.name.split('(')[0].trim()}
-                    </div>
-                  ))}
-                </>
-              )}
-            </>
-          )}
         </div>
 
         {/* Culture popup — bottom-anchored on mobile, floating on desktop */}
@@ -1060,7 +942,11 @@ export default function MigrationMap() {
                 transition: 'all 0.2s',
               }}
             >
-              {isPlaying ? '⏸' : '▶'}
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                {isPlaying
+                  ? <path d="M3 2h3.5v12H3zM9.5 2H13v12H9.5z" />
+                  : <path d="M4 2l10 6-10 6z" />}
+              </svg>
             </button>
           </div>
 
@@ -1078,12 +964,12 @@ export default function MigrationMap() {
               setIsPlaying(false)
             }}
             aria-label="Migration timeline date"
-            style={{ flex: 1, accentColor: 'var(--ochre)', cursor: 'pointer' }}
+            style={{ flex: 1, minWidth: 0, accentColor: 'var(--ochre)', cursor: 'pointer' }}
           />
 
           <span style={{
             fontFamily: 'var(--font-display)', fontSize: '1.2rem',
-            color: 'var(--ochre)', minWidth: 110, textAlign: 'right',
+            color: 'var(--ochre)', minWidth: 'min(110px, 24vw)', whiteSpace: 'nowrap', textAlign: 'right',
             fontWeight: 500,
           }}>
             {dateToLabel(Math.round(currentDate))}
@@ -1136,6 +1022,28 @@ export default function MigrationMap() {
                   ? 'Press play or spacebar to begin'
                   : 'Drag the slider or press play'}
           </span>
+        </div>
+        {/* Legend: every route and culture, lit up as the timeline reaches it */}
+        <div className="map-legend">
+          <ul aria-label="Routes">
+            {migrations.map(m => {
+              const state = m.startDate > currentDate ? 'ahead' : m.endDate >= currentDate ? 'moving' : 'done'
+              return (
+                <li key={m.id} data-state={state}>
+                  <span className="map-legend__line" style={{ background: m.color }} />
+                  {routeName(m)}
+                </li>
+              )
+            })}
+          </ul>
+          <ul aria-label="Cultures">
+            {cultures.map(c => (
+              <li key={c.id} data-state={visibleCulturesList.includes(c) ? 'moving' : 'ahead'}>
+                <span className="map-legend__area" style={{ background: c.color }} />
+                {c.name.split('(')[0].trim()}
+              </li>
+            ))}
+          </ul>
         </div>
         <style>{`
           @keyframes migration-pulse {
